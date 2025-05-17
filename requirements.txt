@@ -1,0 +1,10 @@
+# Base packages
+apache2
+php
+php-cgi
+network-manager
+dnsmasq
+inotify-tools
+python3
+openssh-server
+net-tools
