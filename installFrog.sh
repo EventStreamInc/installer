@@ -1,34 +1,54 @@
 #!/bin/bash
 set -e
 
+# Colors
+GREEN="\033[1;32m"
+YELLOW="\033[1;33m"
+RED="\033[1;31m"
+RESET="\033[0m"
+
+# Fail early if system is not Debian-based
+if [[ ! -d /etc/apt || ! -f /etc/os-release ]]; then
+    echo -e "${RED}ERROR: Couldn't find '/etc/apt' or '/etc/os-release'.${RESET}"
+    echo -e "${RED}This script is for Debian-based distributions using APT only.${RESET}"
+    exit 1
+fi
+
+# Require root
+if [[ $(id -u) -ne 0 ]]; then
+    echo -e "${RED}ERROR: This script must be run as root or with sudo.${RESET}"
+    echo -e "${YELLOW}Try: curl <SCRIPT_URL> | sudo bash${RESET}"
+    exit 1
+fi
+
 REQUIREMENTS_FILE="./requirements.txt"
 REQUIRED_PKGS=()
 
-echo "[*] Parsing requirements..."
+echo -e "${GREEN}[*] Parsing requirements...${RESET}"
 while IFS= read -r line || [[ -n "$line" ]]; do
   line="${line%%#*}"                 # strip inline comments
   line="$(echo "$line" | xargs)"     # trim
   [ -n "$line" ] && REQUIRED_PKGS+=("$line")
-done < requirements.txt
+done < "$REQUIREMENTS_FILE"
 
-echo "[*] Checking installed packages..."
+echo -e "${GREEN}[*] Checking installed packages...${RESET}"
 MISSING_PKGS=()
 for pkg in "${REQUIRED_PKGS[@]}"; do
   dpkg -s "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
 done
 
 if [ "${#MISSING_PKGS[@]}" -eq 0 ]; then
-  echo "[✓] All packages already installed."
+  echo -e "${GREEN}[✓] All packages already installed.${RESET}"
 else
-  echo "[!] Missing packages: ${MISSING_PKGS[*]}"
-  echo "[>] Installing with: sudo apt-get install -y ${MISSING_PKGS[*]}"
-  sudo apt-get update
-  sudo apt-get install -y "${MISSING_PKGS[@]}"
+  echo -e "${YELLOW}[!] Missing packages: ${MISSING_PKGS[*]}${RESET}"
+  echo -e "${GREEN}[>] Installing with: sudo apt-get install -y ${MISSING_PKGS[*]}${RESET}"
+  apt-get update
+  apt-get install -y "${MISSING_PKGS[@]}"
 
   if [ $? -eq 0 ]; then
-    echo "[✓] All packages installed successfully."
+    echo -e "${GREEN}[✓] All packages installed successfully.${RESET}"
   else
-    echo "[!] Failed to install packages."
+    echo -e "${RED}[!] Failed to install packages.${RESET}"
     exit 1
   fi
 fi
