@@ -21,6 +21,35 @@ if [[ $(id -u) -ne 0 ]]; then
     exit 1
 fi
 
+# Get environment variables from the user
+ENV_FILE="frognet.env"
+
+echo -e "${GREEN}[*] Setting up FrogNet configuration...${RESET}"
+
+# Prompt for network name
+read -rp "Enter your FrogNet network name [default: FrogNet-001]: " NETWORK_NAME
+NETWORK_NAME=${NETWORK_NAME:-FrogNet-001}
+
+# Prompt for IP address
+read -rp "Enter the IP address for this node [default: 192.168.1.100]: " NODE_IP
+NODE_IP=${NODE_IP:-192.168.1.100}
+
+# Determine default network interface
+DEFAULT_IFACE=$(ip route | grep default | awk '{print $5}')
+read -rp "Detected network interface is '$DEFAULT_IFACE'. Use this? [Y/n]: " IFACE_CONFIRM
+if [[ "$IFACE_CONFIRM" =~ ^[Nn]$ ]]; then
+  read -rp "Enter your network interface name (e.g., eth0, ens33): " CUSTOM_IFACE
+  DEFAULT_IFACE=$CUSTOM_IFACE
+fi
+
+# Save to .env file
+echo "FROGNET_NETWORK_NAME=\"$NETWORK_NAME\"" > "$ENV_FILE"
+echo "FROGNET_NODE_IP=\"$NODE_IP\"" >> "$ENV_FILE"
+echo "FROGNET_INTERFACE=\"$DEFAULT_IFACE\"" >> "$ENV_FILE"
+
+echo -e "${GREEN}[*] Configuration saved to $ENV_FILE${RESET}"
+
+
 REQUIREMENTS_FILE="./requirements.txt"
 REQUIRED_PKGS=()
 
