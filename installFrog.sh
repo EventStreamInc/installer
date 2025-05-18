@@ -51,6 +51,17 @@ if [[ "$IFACE_CONFIRM" =~ ^[Nn]$ ]]; then
     DEFAULT_IFACE=$CUSTOM_IFACE
 fi
 
+read -rp "Enter admin username [default: admin]: " FROGNET_USERNAME
+FROGNET_USERNAME=${FROGNET_USERNAME:-admin}
+
+read -rsp "Enter admin password [default: frognet123]: " FROGNET_PASSWORD
+echo
+FROGNET_PASSWORD=${FROGNET_PASSWORD:-frognet123}
+
+echo "FROGNET_USERNAME=\"$FROGNET_USERNAME\"" >> "$ENV_FILE"
+echo "FROGNET_PASSWORD=\"$FROGNET_PASSWORD\"" >> "$ENV_FILE"
+
+
 echo "FROGNET_NETWORK_NAME=\"$NETWORK_NAME\"" > "$ENV_FILE"
 echo "FROGNET_NODE_IP=\"$NODE_IP\"" >> "$ENV_FILE"
 echo "FROGNET_INTERFACE=\"$DEFAULT_IFACE\"" >> "$ENV_FILE"
@@ -98,3 +109,7 @@ if ! crontab -l 2>/dev/null | grep -q "restartInstaller.sh"; then
 else
     echo -e "${YELLOW}[!]${RESET} @reboot cron job already exists."
 fi
+
+echo -e "${GREEN}[*]${RESET} Rebooting to complete setup..."
+reboot
+
