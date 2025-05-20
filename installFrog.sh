@@ -100,6 +100,50 @@ else
         exit 1
     fi
 fi
+# Extract the tarball
+INSTALL_TAR="./installable_tar.tar"
+if [ -f "$INSTALL_TAR" ]; then
+    echo -e "${GREEN}[*]${RESET} Extracting installable_tar.tar to / ..."
+    tar xvf "$INSTALL_TAR" -C /
+else
+    echo -e "${RED}[!]${RESET} installable_tar.tar not found!"
+    exit 1
+fi
+
+# Auto-update /usr/local/bin/mapInterfaces with detected interface names
+MAP_FILE="/usr/local/bin/mapInterfaces"
+if [ -f "$MAP_FILE" ]; then
+  echo -e "${GREEN}[*]${RESET} Updating interface mapping file..."
+
+  sed -i "s/eth0/${DEFAULT_IFACE}/g" "$MAP_FILE"
+  echo "[*] Updated interface mapping. Confirm? (Y/n, timeout 10s)"
+
+  read -t 10 -n 1 CONFIRM || CONFIRM="Y"
+  echo
+
+  if [[ "$CONFIRM" =~ ^[Nn]$ ]]; then
+    echo "[!] Opening mapping file in editor..."
+    sleep 1
+    ${EDITOR:-nano} "$MAP_FILE"
+  fi
+else
+  echo -e "${YELLOW}[!]${RESET} mapInterfaces file not found. Skipping."
+fi
+
+# Ask for domain name & FrogNet IP (interactive per John’s flow)
+read -rp "Enter your FrogNet domain name (FQDN): " FROGNET_DOMAIN
+FROGNET_DOMAIN=${FROGNET_DOMAIN:-frognet.local}
+
+read -rp "Enter your FrogNet node IP address [default: $NODE_IP]: " FROGNET_NODE_IP
+FROGNET_NODE_IP=${FROGNET_NODE_IP:-$NODE_IP}
+
+# Persist to frognet.env
+{
+  echo "FROGNET_DOMAIN=\"$FROGNET_DOMAIN\""
+  echo "FROGNET_NODE_IP=\"$FROGNET_NODE_IP\""
+} >> "$ENV_FILE"
+
+echo -e "${GREEN}[*]${RESET} Domain set to $FROGNET_DOMAIN, Node IP set to $FROGNET_NODE_IP"
 
 # Add @reboot cron entry for restartInstaller.sh
 CRON_JOB="@reboot /usr/local/bin/restartInstaller.sh"

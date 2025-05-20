@@ -34,15 +34,6 @@ if [ "${#MISSING_PKGS[@]}" -gt 0 ]; then
   apt-get install -y "${MISSING_PKGS[@]}"
 fi
 
-# Tarball install
-INSTALL_TAR="/root/installable_tar.tar"
-if [ -f "$INSTALL_TAR" ]; then
-  echo "[*] Extracting tarball..."
-  tar xvf "$INSTALL_TAR" -C /
-else
-  echo "[!] Tarball not found at $INSTALL_TAR. Aborting."
-  exit 1
-fi
 #update network IF names in mapInterface file
 echo "[*] Updating network interface names..."
 sed -i "s/ens33/$DEFAULT_IFACE/g" /etc/frognet/mapInterface
