@@ -1,6 +1,10 @@
 #!/bin/bash
 set -euo pipefail
 
+# Clean cronjob
+crontab -l | grep -v 'restartInstaller.sh' | crontab -
+echo "[✓] Cronjob cleaned up."
+
 LOG_FILE="/var/log/frognet-restart.log"
 exec >> "$LOG_FILE" 2>&1
 
@@ -35,20 +39,18 @@ INSTALL_TAR="/root/installable_tar.tar"
 if [ -f "$INSTALL_TAR" ]; then
   echo "[*] Extracting tarball..."
   tar xvf "$INSTALL_TAR" -C /
+else
+  echo "[!] Tarball not found at $INSTALL_TAR. Aborting."
+  exit 1
 fi
-
-# Git fallback
-REPO_DIR="/opt/frognet"
-if [ ! -d "$REPO_DIR" ]; then
-  echo "[*] Cloning repository..."
-  git clone https://github.com/EventStreamInc/FrogNetHost.git "$REPO_DIR"
-fi
+#update network IF names in mapInterface file
+echo "[*] Updating network interface names..."
+sed -i "s/ens33/$DEFAULT_IFACE/g" /etc/frognet/mapInterface
+./setupLily.sh
+echo "[*] Setting up Lilypad..."
 
 echo "[*] Linking files..."
 find "$REPO_DIR" -type f -exec ln -sf {} / \;
 
-# Clean cronjob
-crontab -l | grep -v 'restartInstaller.sh' | crontab -
-echo "[✓] Cronjob cleaned up."
 
 echo "========== Setup complete =========="
