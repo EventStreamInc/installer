@@ -1,47 +1,38 @@
 #!/bin/bash
 set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
-# Clean cronjob
-crontab -l | grep -v 'restartInstaller.sh' | crontab -
+# remove cron entry
+crontab -l | grep -v restartInstaller.sh | crontab -
 echo "[✓] Cronjob cleaned up."
 
-LOG_FILE="/var/log/frognet-restart.log"
-exec >> "$LOG_FILE" 2>&1
+LOG_FILE=/var/log/frognet-restart.log
+exec >>"$LOG_FILE" 2>&1
+echo "==== $(date) Restart Phase ===="
 
-echo "========== $(date) Restart Phase =========="
+# load config
+source /~/frognet/frognet.env
 
-# Load config
-ENV_FILE="/root/frognet.env"
-if [ -f "$ENV_FILE" ]; then
-  source "$ENV_FILE"
+# map interface
+if [ -f /etc/frognet/mapInterface ]; then
+  sed -i "s/ens33/${FROGNET_INTERFACE}/g" /etc/frognet/mapInterface
+  echo "[✓] Interface mapped to ${FROGNET_INTERFACE}"
 else
-  echo "[!] frognet.env not found at $ENV_FILE. Aborting."
-  exit 1
+  echo "[!] mapInterface not found, skipping"
 fi
 
-echo "[*] Running with user: $FROGNET_USERNAME"
+# cd into FrogNet dir
+REPO_DIR=~/frognet    
+cd "$REPO_DIR"
 
-REQUIRED_PKGS=(apache2 php php-cgi network-manager dnsmasq inotify-tools python3 openssh-server net-tools)
-MISSING_PKGS=()
+# run the lilypad setup
+echo "[*] Running setup_lillypad..."
+./setup_lillypad.bash --domain "$FROGNET_DOMAIN" --ip "$FROGNET_NODE_IP"
 
-for pkg in "${REQUIRED_PKGS[@]}"; do
-  dpkg -s "$pkg" &>/dev/null || MISSING_PKGS+=("$pkg")
-done
+# link files
+echo "[*] Linking FrogNet files to /"
+find . -type f -exec ln -sf {} / \;
 
-if [ "${#MISSING_PKGS[@]}" -gt 0 ]; then
-  echo "[!] Installing: ${MISSING_PKGS[*]}"
-  apt-get update
-  apt-get install -y "${MISSING_PKGS[@]}"
-fi
-
-#update network IF names in mapInterface file
-echo "[*] Updating network interface names..."
-sed -i "s/ens33/$DEFAULT_IFACE/g" /etc/frognet/mapInterface
-./setupLily.sh
-echo "[*] Setting up Lilypad..."
-
-echo "[*] Linking files..."
-find "$REPO_DIR" -type f -exec ln -sf {} / \;
-
-
-echo "========== Setup complete =========="
+# Reboot again
+echo "[*] Rebooting to apply changes..."
+reboot
