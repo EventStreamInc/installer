@@ -27,7 +27,7 @@ cd "$REPO_DIR"
 
 # run the lilypad setup
 echo "[*] Running setup_lillypad..."
-./setup_lillypad.bash --domain "$FROGNET_DOMAIN" --ip "$FROGNET_NODE_IP"
+./setup_lillypad.bash "$FROGNET_DOMAIN" "$FROGNET_NODE_IP"
 
 # link files
 echo "[*] Linking FrogNet files to /"
