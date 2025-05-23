@@ -1,6 +1,7 @@
 # Base packages
 apache2
 php
+jq
 php-cgi
 network-manager
 dnsmasq
