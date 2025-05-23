@@ -2,6 +2,7 @@
 apache2
 php
 jq
+iptables
 php-cgi
 network-manager
 dnsmasq
