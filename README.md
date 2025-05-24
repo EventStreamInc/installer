@@ -1,53 +1,40 @@
-##FrogNet Installer
+# 🐸 FrogNet Installer
 
-This package contains everything you need to install and configure a FrogNet node on a Debian/Ubuntu-based system.
+This script sets up a FrogNet node on a compatible Linux machine.
 
-Contents
+---
 
-installer.sh — Main bootstrap script
+## Requirements
 
-Prerequisites
+- A Linux system with:
+  - One Ethernet port
+  - One other internet connection (Wi-Fi or USB Ethernet)
+- A router in **Access Point (Gateway/Passive)** mode
+- Internet access during install
 
-A Debian-based distribution (Debian, Ubuntu)
+Tested on:
+- Raspberry Pi 4
+- Intel NUC
 
-sudo or root access
+---
 
-An empty directory to unzip this package into
+## What It Installs
 
-Quick Start
+The script installs:
+- Apache2 with PHP and CGI
+- NetworkManager
+- dnsmasq
+- Python3
+- inotify-tools
+- openssh-server
+- net-tools
 
-Unzip the downloaded .zip into an empty folder:
+---
 
-unzip FrogNet-Installer-vX.Y.zip -d frognet-installer
-cd frognet-installer
+## Installation
 
-Make the installer executable:
-
+```bash
+git clone https://github.com/EventStreamInc/FrogNetHost.git
+cd FrogNetHost
 chmod +x installer.sh
-
-Run the installer (as root):
-
 sudo ./installer.sh
-
-The script will guide you through:
-
-Selecting your network interface (upstream/Wi‑Fi)
-
-Choosing an admin username
-
-Defining the FrogNet domain (FQDN)
-
-Assigning a static IP on the FrogNet subnet
-
-Reboot — the installer automatically schedules a post-boot startup:
-
-# The script will reboot for you, or you can run:
-sudo reboot
-
-Verify
-
-Check /var/log/frognet-reboot.log for the installer’s reboot-phase logs.
-
-Check /var/log/frognet-start.log for the FrogNet startup script output.
-
-Your node should now advertise the configured FQDN on the FrogNet network.
