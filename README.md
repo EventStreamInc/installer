@@ -1,40 +1,61 @@
-# 🐸 FrogNet Installer
+FrogNet Installer
 
-This script sets up a FrogNet node on a compatible Linux machine.
+This package contains everything you need to install and configure a FrogNet node on a Debian/Ubuntu-based system.
 
----
+Contents
 
-## Requirements
+installer.sh — Main bootstrap script (single-archive mode)
 
-- A Linux system with:
-  - One Ethernet port
-  - One other internet connection (Wi-Fi or USB Ethernet)
-- A router in **Access Point (Gateway/Passive)** mode
-- Internet access during install
+installable_tar.tar — Bundled FrogNet services, configs, and helper scripts
 
-Tested on:
-- Raspberry Pi 4
-- Intel NUC
+frognet.env — Generated environment file storing your configuration
 
----
+mapInterface — Interface-mapping helper (installed to /usr/local/bin)
 
-## What It Installs
+startFrog.bash / startFrogNet.bash / setup_lillypad.bash — Startup scripts
 
-The script installs:
-- Apache2 with PHP and CGI
-- NetworkManager
-- dnsmasq
-- Python3
-- inotify-tools
-- openssh-server
-- net-tools
+Prerequisites
 
----
+A Debian-based distribution (Debian, Ubuntu)
 
-## Installation
+sudo or root access
 
-```bash
-git clone https://github.com/EventStreamInc/FrogNetHost.git
-cd FrogNetHost
+An empty directory to unzip this package into
+
+Quick Start
+
+Unzip the downloaded .zip into an empty folder:
+
+unzip FrogNet-Installer-vX.Y.zip -d frognet-installer
+cd frognet-installer
+
+Make the installer executable:
+
 chmod +x installer.sh
+
+Run the installer (as root):
+
 sudo ./installer.sh
+
+The script will guide you through:
+
+Selecting your network interface (upstream/Wi‑Fi)
+
+Choosing an admin username
+
+Defining the FrogNet domain (FQDN)
+
+Assigning a static IP on the FrogNet subnet
+
+Reboot — the installer automatically schedules a post-boot startup:
+
+# The script will reboot for you, or you can run:
+sudo reboot
+
+Verify
+
+Check /var/log/frognet-reboot.log for the installer’s reboot-phase logs.
+
+Check /var/log/frognet-start.log for the FrogNet startup script output.
+
+Your node should now advertise the configured FQDN on the FrogNet network.
