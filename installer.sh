@@ -129,9 +129,12 @@ else
   echo_warn "$MAP_SCRIPT missing; skipping interface mapping"
 fi
 
-# 9) Schedule post-reboot actions
-( crontab -l 2>/dev/null || true; echo "@reboot $0 --on-reboot" ) | crontab -
-echo_info "Scheduled post-reboot startup via cron"
+# 9) Schedule post-reboot actions (use absolute path)
+INSTALLER=$(readlink -f "$0")
+( crontab -l 2>/dev/null || true; \
+  echo "@reboot /bin/bash $INSTALLER --on-reboot" \
+) | crontab -
+echo_info "Scheduled @reboot task: runs $INSTALLER --on-reboot"
 
 # 10) Final step: reboot
 echo_info "Setup complete. Rebooting now to apply all changes..."
