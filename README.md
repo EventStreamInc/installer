@@ -1,18 +1,10 @@
-FrogNet Installer
+##FrogNet Installer
 
 This package contains everything you need to install and configure a FrogNet node on a Debian/Ubuntu-based system.
 
 Contents
 
-installer.sh — Main bootstrap script (single-archive mode)
-
-installable_tar.tar — Bundled FrogNet services, configs, and helper scripts
-
-frognet.env — Generated environment file storing your configuration
-
-mapInterface — Interface-mapping helper (installed to /usr/local/bin)
-
-startFrog.bash / startFrogNet.bash / setup_lillypad.bash — Startup scripts
+installer.sh — Main bootstrap script
 
 Prerequisites
 
