@@ -1,113 +1,138 @@
 #!/usr/bin/env bash
-# installFrog.sh - FrogNet Node Installer
-# Clones and configures a FrogNet node on Debian-based systems.
+# installer.sh - FrogNet Node Installer (single-archive mode)
+# Unpressed package contains all scripts + installable_tar.tar.
+# Usage: unzip package && sudo ./installer.sh
 set -euo pipefail
 
-# Color codes
-GREEN="\033[1;32m"
-YELLOW="\033[1;33m"
-RED="\033[1;31m"
-RESET="\033[0m"
+# --- Constants ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ENV_FILE="$SCRIPT_DIR/frognet.env"
+TARBALL="$SCRIPT_DIR/installable_tar.tar"
+MAP_SCRIPT="/usr/local/bin/mapInterface"
+START_SCRIPT_NAMES=("startFrog.bash" "startFrogNet.bash" "setup_lillypad.bash")
 
-# --- Configuration ---
 # Packages required by FrogNet
-REQUIRED_PKGS=(
-  apache2 php jq iptables php-cgi network-manager dnsmasq inotify-tools python3 openssh-server net-tools
-)
+REQUIRED_PKGS=(apache2 php jq iptables php-cgi network-manager dnsmasq inotify-tools python3 openssh-server net-tools)
 
-# 1) Verify Debian-based
+# --- Helpers ---
+echo_err()  { echo -e "\033[1;31mERROR:\033[0m $*" >&2; }
+echo_info() { echo -e "\033[1;32m[*]\033[0m $*"; }
+echo_warn() { echo -e "\033[1;33m[!]\033[0m $*"; }
+
+# 1) Ensure running on Debian/Ubuntu
 if [[ ! -d /etc/apt || ! -f /etc/os-release ]]; then
-  echo -e "${RED}ERROR:${RESET} This installer supports Debian/Ubuntu only."
+  echo_err "This installer is only compatible with Debian-based distributions (Debian/Ubuntu)."
   exit 1
 fi
 
-# 2) Require root
+# 2) Must be root
 if [[ $EUID -ne 0 ]]; then
-  echo -e "${RED}ERROR:${RESET} Please run as root: sudo $0"
+  echo_err "Please run as root: sudo $0"
   exit 1
 fi
 
-# 3) Detect default network interface
-DEFAULT_IFACE=$(ip route 2>/dev/null | awk '/default/ {print $5; exit}')
-read -rp "Detected network interface is '$DEFAULT_IFACE'. Press Enter to use it or specify another: " IFACE_INPUT
-FROGNET_INTERFACE=${IFACE_INPUT:-$DEFAULT_IFACE}
+# 3) Detect post-reboot invocation
+on_reboot=false
+if [[ "${1-}" == "--on-reboot" ]]; then
+  on_reboot=true
+fi
 
-# 4) Determine admin username
-DEFAULT_USER=${SUDO_USER:-$(whoami)}
-read -rp "Enter the FrogNet admin user [default: $DEFAULT_USER]: " FROGNET_USERNAME
-FROGNET_USERNAME=${FROGNET_USERNAME:-$DEFAULT_USER}
+if $on_reboot; then
+  # Log both to console & reboot log
+  exec > >(tee -a /var/log/frognet-reboot.log) 2> >(tee -a /var/log/frognet-reboot.log >&2)
+  echo_info "=== Post-Reboot Initialization ==="
 
-# 5) Read node settings
-echo "\n--- FrogNet Node Settings ---"
-read -rp "Enter the network domain (FQDN) this node will host [default: frognet.local]: " FROGNET_DOMAIN
-FROGNET_DOMAIN=${FROGNET_DOMAIN:-frognet.local}
-read -rp "Enter this node's IP on the FrogNet network [default: 192.168.1.100]: " FROGNET_NODE_IP
-FROGNET_NODE_IP=${FROGNET_NODE_IP:-192.168.1.100}
+  # Load previous answers
+  source "$ENV_FILE"
 
-# 6) Save configuration to .env
-ENV_FILE="$(dirname "$0")/frognet.env"
+  # Run startup script in background
+  for script in "${START_SCRIPT_NAMES[@]}"; do
+    if [[ -x "$SCRIPT_DIR/$script" ]]; then
+      echo_info "Launching $script in background..."
+      nohup "$SCRIPT_DIR/$script" > /var/log/frognet-start.log 2>&1 &
+      echo_info "Output being captured to /var/log/frognet-start.log"
+      break
+    fi
+  done
+
+  # Remove cron entry
+  (crontab -l 2>/dev/null | grep -v "$0 --on-reboot") | crontab -
+  echo_info "Cron entry cleaned up."
+  echo_info "Post-reboot steps complete."
+  exit 0
+fi
+
+# --- User Prompts with Detailed Explanations ---
+# 4.1) Network Interface
+#    This should be the interface connected to your upstream network
+#    (e.g., Ethernet or Wi-Fi) that FrogNet uses for internet access.
+DEFAULT_IFACE=$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')
+read -rp "Network interface to use (connected to upstream or LAN) [default: $DEFAULT_IFACE]: " iface_input
+FROGNET_INTERFACE=${iface_input:-$DEFAULT_IFACE}
+
+# 4.2) Admin Username
+#    The local user account that will own FrogNet services
+#    (usually the user you log in as).
+default_user=${SUDO_USER:-$(whoami)}
+read -rp "Admin username to configure (services run as this user) [default: $default_user]: " user_input
+FROGNET_USERNAME=${user_input:-$default_user}
+
+# 4.3) FrogNet Domain (FQDN)
+#    The fully-qualified domain name this node will respond to
+#    (e.g., frognet.local or your.custom.domain). 
+read -rp "FrogNet domain (FQDN) for this node [default: frognet.local]: " domain_input
+FROGNET_DOMAIN=${domain_input:-frognet.local}
+
+# 4.4) Node IP Address
+#    The static IP address on the FrogNet subnet that this node will use.
+#    It must not conflict with other devices on the 192.168.1.0/24 network
+#    unless you have customized your FrogNet subnet.
+read -rp "Node IP on FrogNet network (e.g., 192.168.1.100) [default: 192.168.1.100]: " ip_input
+FROGNET_NODE_IP=${ip_input:-192.168.1.100}
+
+# 5) Save answers to .env file
 cat > "$ENV_FILE" <<EOF
 FROGNET_INTERFACE="$FROGNET_INTERFACE"
 FROGNET_USERNAME="$FROGNET_USERNAME"
 FROGNET_DOMAIN="$FROGNET_DOMAIN"
 FROGNET_NODE_IP="$FROGNET_NODE_IP"
 EOF
-echo -e "${GREEN}[✓]${RESET} Saved config to $ENV_FILE"
 
-# 7) Install prerequisites
-MISSING=()
+echo_info "Configuration saved to $ENV_FILE"
+
+# 6) Ensure prerequisite packages installed
+missing=()
 for pkg in "${REQUIRED_PKGS[@]}"; do
-  dpkg -s "$pkg" &>/dev/null || MISSING+=("$pkg")
+  dpkg -s "$pkg" &>/dev/null || missing+=("$pkg")
 done
-if [ ${#MISSING[@]} -gt 0 ]; then
-  echo -e "${YELLOW}[!]${RESET} Installing missing packages: ${MISSING[*]}"
-  apt-get update && apt-get install -y "${MISSING[@]}"
-  echo -e "${GREEN}[✓]${RESET} Packages installed."
+if (( ${#missing[@]} )); then
+  echo_info "Installing missing packages: ${missing[*]}"
+  apt-get update && apt-get install -y "${missing[@]}"
 else
-  echo -e "${GREEN}[✓]${RESET} All required packages already present."
+  echo_info "All prerequisite packages are already installed."
 fi
 
-# 8) Extract release archive
-TARBALL="installable_tar.tar"
+# 7) Extract bundled software
 if [[ -f "$TARBALL" ]]; then
-  echo -e "${GREEN}[*]${RESET} Extracting $TARBALL to /"
+  echo_info "Extracting $(basename "$TARBALL") to root directory..."
   tar xvf "$TARBALL" -C /
 else
-  echo -e "${RED}[!]${RESET} $TARBALL not found in $(pwd)!"
+  echo_err "Could not find tarball $(basename "$TARBALL") in $SCRIPT_DIR"
   exit 1
 fi
 
-# 9) Update interface mapping script
-MAP_SCRIPT="/usr/local/bin/mapInterface"
+# 8) Patch interface mapping script
 if [[ -f "$MAP_SCRIPT" ]]; then
-  sed -i "s/eth0/${FROGNET_INTERFACE}/g" "$MAP_SCRIPT"
-  echo -e "${GREEN}[✓]${RESET} Updated interface in $MAP_SCRIPT"
+  sed -i "s/eth0\|ens33\|ens34\|eth1/$FROGNET_INTERFACE/g" "$MAP_SCRIPT"
+  echo_info "Updated network interface in $MAP_SCRIPT"
 else
-  echo -e "${YELLOW}[!]${RESET} $MAP_SCRIPT missing, skipping mapping."
+  echo_warn "$MAP_SCRIPT missing; skipping interface mapping"
 fi
 
-# 10) Add @reboot cronjob for any post-install commands
-( crontab -l 2>/dev/null | grep -v restartInstaller.sh; echo "@reboot $0 --on-reboot" ) | crontab -
+# 9) Schedule post-reboot actions
+( crontab -l 2>/dev/null || true; echo "@reboot $0 --on-reboot" ) | crontab -
+echo_info "Scheduled post-reboot startup via cron"
 
-echo -e "${GREEN}[✓]${RESET} Queued post-reboot tasks via cron."
-
-# 11) Handle post-reboot initialization
-if [[ "${1:-}" == "--on-reboot" ]]; then
-  echo -e "${GREEN}[*]${RESET} Running post-reboot setup..."
-  REPO_DIR="${HOME}/installer"
-  cd "$REPO_DIR"
-  ./setup_lillypad.bash "$FROGNET_DOMAIN" "$FROGNET_NODE_IP"
-
-  # Link files to /
-  echo "${GREEN}[*]${RESET} Linking files to /"
-  find . -type f -exec ln -sf {} / \
-
-  # Clean up cron
-  ( crontab -l 2>/dev/null | grep -v restartInstaller.sh ) | crontab -
-  echo -e "${GREEN}[✓]${RESET} Post-reboot tasks complete."
-  exit 0
-fi
-
-# 12) Final reboot
-echo -e "${GREEN}[✓]${RESET} Initial install done. Rebooting now to apply changes..."
+# 10) Final step: reboot
+echo_info "Setup complete. Rebooting now to apply all changes..."
 reboot
