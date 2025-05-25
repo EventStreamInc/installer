@@ -1,113 +1,155 @@
 #!/usr/bin/env bash
-# installer.sh - FrogNet Node Installer (single-archive mode)
-# Unzip or untar the purchased package and run this script as root (sudo) to set up a FrogNet node.
+# installer.sh — FrogNet Phase 1 installer (tarball mode)
+# This script will:
+#   1. Verify we’re on Debian/Ubuntu and running as root
+#   2. Install any missing OS packages needed by FrogNet
+#   3. Prompt the user for FrogNet configuration values
+#   4. Save those values to /etc/frognet/frognet.env
+#   5. Copy the entire unpacked ZIP (scripts, README, tarball, etc.) into /etc/frognet
+#
+# It does NOT extract the tarball—that’s reserved for Phase 2.
 set -euo pipefail
 
-# --- Constants ---
+# --- Constants -------------------------------------------------------------
+
+# List of Debian/Ubuntu packages FrogNet requires
+REQUIRED_PKGS=(
+  apache2
+  php
+  jq
+  iptables
+  php-cgi
+  network-manager
+  dnsmasq
+  inotify-tools
+  python3
+  openssh-server
+  net-tools
+)
+
+# Where we’ll install all FrogNet files for inspection
+INSTALL_DIR="/etc/frognet"
+
+# The env file that will hold user-provided settings
+ENV_FILE="$INSTALL_DIR/frognet.env"
+
+# Directory where this installer script lives (the unpacked ZIP root)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="$SCRIPT_DIR/frognet.env"
-TARBALL="$SCRIPT_DIR/installable_tar.tar"
-MAP_SCRIPT="/usr/local/bin/mapInterface"
-START_SCRIPT_NAMES=("startFrog.bash" "startFrogNet.bash" "setup_lillypad.bash")
 
-# Packages required by FrogNet
-REQUIRED_PKGS=(apache2 php jq iptables php-cgi network-manager dnsmasq inotify-tools python3 openssh-server net-tools)
 
-# --- Helpers ---
-echo_err() { echo -e "\033[1;31mERROR:\033[0m $*" >&2; }
-echo_info() { echo -e "\033[1;32m[*]\033[0m $*"; }
-echo_warn() { echo -e "\033[1;33m[!]\033[0m $*"; }
+# --- Helper Functions -----------------------------------------------------
 
-# 1) Ensure Debian-based
-if [[ ! -d /etc/apt || ! -f /etc/os-release ]]; then
-  echo_err "This installer supports Debian/Ubuntu only."
+# Print an error message in red, then exit
+echo_err() {
+  echo -e "\033[1;31mERROR:\033[0m $*" >&2
   exit 1
+}
+
+# Print an informational message in green
+echo_info() {
+  echo -e "\033[1;32m[*]\033[0m $*"
+}
+
+# Print a warning in yellow
+echo_warn() {
+  echo -e "\033[1;33m[!]\033[0m $*"
+}
+
+
+# --- 1) Pre-flight Checks -------------------------------------------------
+
+# Ensure we’re on a Debian/Ubuntu-like system
+if [[ ! -f /etc/os-release ]]; then
+  echo_err "This installer only supports Debian/Ubuntu."
 fi
 
-# 2) Require root
-if [[ $EUID -ne 0 ]]; then
-  echo_err "Must be run as root. Use: sudo $0"
-  exit 1
+# Ensure script is run as root (so we can write to /etc and install packages)
+if (( EUID != 0 )); then
+  echo_err "Must be run as root. Please re-run with: sudo $0"
 fi
 
-# 3) Parse "--on-reboot" flag
-on_reboot=false
-if [[ "${1-}" == "--on-reboot" ]]; then
-  on_reboot=true
+
+# --- 2) Install Missing OS Packages --------------------------------------
+
+# Build a list of packages not yet installed
+missing=()
+for pkg in "${REQUIRED_PKGS[@]}"; do
+  if ! dpkg -s "$pkg" &>/dev/null; then
+    missing+=("$pkg")
+  fi
+done
+
+# If any are missing, install them
+if (( ${#missing[@]} > 0 )); then
+  echo_info "Installing missing packages: ${missing[*]}"
+  # Non-interactive frontend prevents prompts
+  export DEBIAN_FRONTEND=noninteractive
+  apt-get update -qq
+  apt-get install -y "${missing[@]}"
+else
+  echo_info "All required packages are already installed."
 fi
 
-if $on_reboot; then
-  # Post-reboot actions: start FrogNet
-  echo_info "Running post-reboot startup..."
-  source "$ENV_FILE"
-  # run available start script
-  for name in "${START_SCRIPT_NAMES[@]}"; do
-    if [[ -x "$SCRIPT_DIR/$name" ]]; then
-      echo_info "Invoking $name..."
-      nohup "$SCRIPT_DIR/$name" > /var/log/frognet-start.log 2>&1 &
-      break
-    fi
-  done
-  # cleanup cron entry
-  ( crontab -l 2>/dev/null | grep -v "$0 --on-reboot" ) | crontab -
-  echo_info "Post-reboot startup complete."
-  exit 0
-fi
 
-# 4) Gather inputs
-# interface
-DEFAULT_IFACE=$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')
-read -rp "Network interface to use [default: $DEFAULT_IFACE]: " iface_input
-FROGNET_INTERFACE=${iface_input:-$DEFAULT_IFACE}
+# --- 3) Prompt User for Configuration ------------------------------------
 
-# domain & node IP
-read -rp "FrogNet domain (FQDN) [default: frognet.local]: " domain_input
-FROGNET_DOMAIN=${domain_input:-frognet.local}
-read -rp "Node IP on FrogNet network [default: 10.10.10.1]: " ip_input
-FROGNET_NODE_IP=${ip_input:-192.168.1.100}
-# oct1=`$random%254`
-#last digit must be a one 
-# 5) Write .env
+echo_info "Now configuring FrogNet. You can press ENTER to accept each default."
+
+# 3a) Network interface for FrogNet’s dedicated subnet
+echo "This is the network interface that FrogNet will use for its own private subnet."
+DEFAULT_IFACE="$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')"
+read -rp "FrogNet interface [default: $DEFAULT_IFACE]: " iface_input
+FROGNET_INTERFACE="${iface_input:-$DEFAULT_IFACE}"
+
+# 3b) Local domain name (FQDN) FrogNet will serve
+echo "This is the local domain (FQDN) that this node will answer for."
+read -rp "FrogNet domain [default: frognet.local]: " domain_input
+FROGNET_DOMAIN="${domain_input:-frognet.local}"
+
+# 3c) Node’s IP address on the FrogNet subnet
+echo "This is the static IP for this node on the FrogNet subnet."
+echo "It should not conflict with your existing LAN—recommended: 10.101.0.1"
+read -rp "FrogNet node IP [default: 10.101.0.1]: " ip_input
+FROGNET_NODE_IP="${ip_input:-10.101.0.1}"
+
+
+# --- 4) Save Configuration to ENV File -----------------------------------
+
+echo_info "Saving configuration to $ENV_FILE"
+mkdir -p "$(dirname "$ENV_FILE")"
+
 cat > "$ENV_FILE" <<EOF
+# FrogNet configuration (Phase 1)
+// Generated on $(date)
 FROGNET_INTERFACE="$FROGNET_INTERFACE"
 FROGNET_DOMAIN="$FROGNET_DOMAIN"
 FROGNET_NODE_IP="$FROGNET_NODE_IP"
 EOF
-echo_info "Configuration saved to $ENV_FILE"
 
-# 6) Install packages
-missing=()
-for pkg in "${REQUIRED_PKGS[@]}"; do
-  dpkg -s "$pkg" &>/dev/null || missing+=("$pkg")
-done
-if (( ${#missing[@]} )); then
-  echo_info "Installing missing packages: ${missing[*]}"
-  apt-get update && apt-get install -y "${missing[@]}"
-else
-  echo_info "All required packages present."
+
+# --- 5) Copy All Files into /etc/frognet ----------------------------------
+
+# If an old install exists, confirm overwrite
+if [[ -d "$INSTALL_DIR" ]]; then
+  echo_warn "Existing FrogNet installation detected at $INSTALL_DIR."
+  read -rp "Overwrite it? [y/N]: " confirm
+  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    echo_info "Aborting—no changes made."
+    exit 0
+  fi
 fi
 
-# 7) Extract tarball
-if [[ -f "$TARBALL" ]]; then
-  echo_info "Extracting contents of $(basename "$TARBALL")..."
-  tar xvf "$TARBALL" -C /
-else
-  echo_err "Tarball $(basename "$TARBALL") not found in $SCRIPT_DIR"
-  exit 1
-fi
+echo_info "Copying all files from $SCRIPT_DIR → $INSTALL_DIR"
+rm -rf "$INSTALL_DIR"
+mkdir -p "$INSTALL_DIR"
+# -a: archive mode (preserves subdirs, permissions, symlinks)
+# --chown=root:root: make everything owned by root
+rsync -a --chown=root:root "$SCRIPT_DIR"/ "$INSTALL_DIR"/
 
-# 8) Update interface mapping
-if [[ -f "$MAP_SCRIPT" ]]; then
-  sed -i "s/eth0\|ens33\|ens34\|eth1/$FROGNET_INTERFACE/g" "$MAP_SCRIPT"
-  echo_info "Updated interface mapping in $MAP_SCRIPT"
-else
-  echo_warn "$MAP_SCRIPT missing, skipping interface mapping"
-fi
+echo_info "All files are now available under $INSTALL_DIR for inspection."
 
-# 9) Schedule post-reboot startup
-echo "@reboot $0 --on-reboot" | { crontab -l 2>/dev/null || true; cat; } | crontab -
-echo_info "Scheduled post-reboot startup via cron"
 
-# 10) Final reboot
-echo_info "Initial setup complete. Rebooting now to apply changes..."
-reboot
+# --- Phase 1 Complete ------------------------------------------------------
+
+echo_info "✅ Phase 1 complete! Dependencies installed, config written, and files copied."
+echo_info "Next up: Phase 2 (tarball extraction, symlinks, service setup, etc.)."
