@@ -60,11 +60,6 @@ DEFAULT_IFACE=$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')
 read -rp "Network interface to use [default: $DEFAULT_IFACE]: " iface_input
 FROGNET_INTERFACE=${iface_input:-$DEFAULT_IFACE}
 
-# admin user
-default_user=${SUDO_USER:-$(whoami)}
-read -rp "Admin username [default: $default_user]: " user_input
-FROGNET_USERNAME=${user_input:-$default_user}
-
 # domain & node IP
 read -rp "FrogNet domain (FQDN) [default: frognet.local]: " domain_input
 FROGNET_DOMAIN=${domain_input:-frognet.local}
@@ -74,7 +69,6 @@ FROGNET_NODE_IP=${ip_input:-192.168.1.100}
 # 5) Write .env
 cat > "$ENV_FILE" <<EOF
 FROGNET_INTERFACE="$FROGNET_INTERFACE"
-FROGNET_USERNAME="$FROGNET_USERNAME"
 FROGNET_DOMAIN="$FROGNET_DOMAIN"
 FROGNET_NODE_IP="$FROGNET_NODE_IP"
 EOF
