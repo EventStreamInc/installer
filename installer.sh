@@ -63,9 +63,10 @@ FROGNET_INTERFACE=${iface_input:-$DEFAULT_IFACE}
 # domain & node IP
 read -rp "FrogNet domain (FQDN) [default: frognet.local]: " domain_input
 FROGNET_DOMAIN=${domain_input:-frognet.local}
-read -rp "Node IP on FrogNet network [default: 192.168.1.100]: " ip_input
+read -rp "Node IP on FrogNet network [default: 10.10.10.1]: " ip_input
 FROGNET_NODE_IP=${ip_input:-192.168.1.100}
-
+# oct1=`$random%254`
+#last digit must be a one 
 # 5) Write .env
 cat > "$ENV_FILE" <<EOF
 FROGNET_INTERFACE="$FROGNET_INTERFACE"
