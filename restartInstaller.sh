@@ -29,10 +29,6 @@ cd "$REPO_DIR"
 echo "[*] Running setup_lillypad..."
 ./setup_lillypad.bash "$FROGNET_DOMAIN" "$FROGNET_NODE_IP"
 
-# link files
-echo "[*] Linking FrogNet files to /"
-find . -type f -exec ln -sf {} / \;
-
 # Reboot again
-echo "[*] Rebooting to apply changes..."
+# echo "[*] Rebooting to apply changes..."
 reboot
