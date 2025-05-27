@@ -33,7 +33,7 @@ The script installs:
 ## Installation
 
 ```bash
-git clone https://github.com/EventStreamInc/FrogNetHost.git
-cd FrogNetHost
+git clone -b jeremy https://github.com/EventStreamInc/FrogNetHost.git
+cd installer
 chmod +x installer.sh
 sudo ./installer.sh
