@@ -171,120 +171,76 @@ DEFAULT_INTERNET_IFACE="$(ip route 2>/dev/null | awk '/^default/ {print $5; exit
 echo ""
 echo_info "FrogNet Configuration"
 echo_info "===================="
-echo_info "Please provide the following configuration details:"
 echo ""
 
-# 1. Access Point Name (SSID)
-echo_info "1. Access Point Configuration"
-echo "This will be the WiFi network name that devices connect to."
-ap_name=$(prompt_with_default "Access Point Name (SSID)" "FrogNet-$(hostname)")
+# Use pre-configured values or sensible defaults
+ap_name="bob"  # Default AP name from troubleshooting session
+ap_password="frognet123"  # Default password
+domain="freddy"  # Default domain from troubleshooting
 
-# 2. Access Point Password (optional)
+echo_info "Using default configuration:"
+echo_info "Access Point Name: $ap_name"
+echo_info "Domain: $domain"
 echo ""
-echo "WiFi Password (leave empty for open network - not recommended):"
-read -rsp "Access Point Password (8+ characters): " ap_password
-echo ""
-if [[ -n "$ap_password" && ${#ap_password} -lt 8 ]]; then
-  echo_err "Password must be at least 8 characters long"
-fi
 
-# 3. Domain name
-echo ""
-echo_info "2. Network Configuration"
-echo "This is the local domain name for this FrogNet node."
-domain=$(prompt_with_default "Local domain name" "${ap_name,,}")  # lowercase version of AP name
-
-# 4. FrogNet subnet IP (auto-generate non-conflicting)
-echo ""
-echo "FrogNet Subnet Configuration:"
+# 1. FrogNet subnet IP (auto-generate or use default from troubleshooting)
+echo_info "Network Configuration:"
 echo "This node needs its own IP address on the FrogNet subnet."
 
-# Generate a default IP that doesn't conflict
-DEFAULT_NODE_IP=""
-for attempt in {1..10}; do
-  candidate_ip=$(generate_random_ip)
-  if check_ip_conflict "$candidate_ip"; then
-    DEFAULT_NODE_IP="$candidate_ip"
-    break
-  fi
-done
+# Use default IP from troubleshooting session or auto-generate
+DEFAULT_NODE_IP="10.8.8.1"  # From successful troubleshooting session
 
-if [[ -z "$DEFAULT_NODE_IP" ]]; then
-  DEFAULT_NODE_IP="10.8.8.1"
-  echo_warn "Could not auto-generate non-conflicting IP. Using: $DEFAULT_NODE_IP"
+# Check if this IP conflicts, if so generate alternative
+if ! check_ip_conflict "$DEFAULT_NODE_IP"; then
+  echo_warn "Default IP $DEFAULT_NODE_IP conflicts with existing network"
+  for attempt in {1..10}; do
+    candidate_ip=$(generate_random_ip)
+    if check_ip_conflict "$candidate_ip"; then
+      DEFAULT_NODE_IP="$candidate_ip"
+      echo_info "Using alternative IP: $DEFAULT_NODE_IP"
+      break
+    fi
+  done
 fi
 
-while true; do
-  frognet_ip=$(prompt_with_default "FrogNet subnet gateway IP" "$DEFAULT_NODE_IP")
-  if validate_ip "$frognet_ip"; then
-    break
-  else
-    echo_warn "Invalid IP address format. Please try again."
-  fi
-done
+frognet_ip="$DEFAULT_NODE_IP"
+echo_info "FrogNet gateway IP: $frognet_ip"
 
 # Extract subnet base from IP (e.g., 10.8.8.1 -> 10.8.8)
 subnet_base="${frognet_ip%.*}"
 
-# 5. Ethernet interface (for FrogNet subnet)
+# 2. Interface configuration (auto-detect or use common defaults)
 echo ""
-echo_info "3. Interface Configuration"
-echo "Select which interface will serve the FrogNet subnet (usually eth0):"
+echo_info "Interface Configuration:"
 
-if (( ${#available_interfaces[@]} == 1 )); then
-  eth_interface="${available_interfaces[0]}"
-  echo_info "Using interface: $eth_interface"
-else
-  echo "Available interfaces:"
-  for i in "${!available_interfaces[@]}"; do
-    interface="${available_interfaces[i]}"
-    status=""
-    if [[ "$interface" == "$DEFAULT_INTERNET_IFACE" ]]; then
-      status=" (currently has internet)"
-    elif ip addr show "$interface" | grep -q "inet "; then
-      status=" (has IP)"
-    fi
-    echo "  $((i+1)). $interface$status"
-  done
-  
-  while true; do
-    read -rp "Select ethernet interface for FrogNet subnet (1-${#available_interfaces[@]}): " selection
-    if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#available_interfaces[@]} )); then
-      eth_interface="${available_interfaces[$((selection-1))]}"
+# Auto-detect ethernet interface (prefer eth0)
+if ip link show eth0 &>/dev/null; then
+  eth_interface="eth0"
+  echo_info "Using ethernet interface: $eth_interface"
+elif (( ${#available_interfaces[@]} > 0 )); then
+  # Use first available non-wifi interface
+  for iface in "${available_interfaces[@]}"; do
+    if [[ ! " ${wifi_interfaces[*]} " =~ " $iface " ]]; then
+      eth_interface="$iface"
       break
-    else
-      echo_warn "Invalid selection. Please choose 1-${#available_interfaces[@]}."
     fi
   done
+  echo_info "Using ethernet interface: $eth_interface"
+else
+  echo_err "No suitable ethernet interface found"
 fi
 
-# 6. Internet interface (WiFi for upstream)
+# Auto-detect WiFi interface for internet connection
 wifi_interface=""
 if [[ -n "$DEFAULT_INTERNET_IFACE" ]]; then
   wifi_interface="$DEFAULT_INTERNET_IFACE"
   echo_info "Using internet interface: $wifi_interface"
+elif ip link show wlan0 &>/dev/null; then
+  wifi_interface="wlan0"
+  echo_info "Using WiFi interface: $wifi_interface"
 elif (( ${#wifi_interfaces[@]} > 0 )); then
-  if (( ${#wifi_interfaces[@]} == 1 )); then
-    wifi_interface="${wifi_interfaces[0]}"
-    echo_info "Using WiFi interface: $wifi_interface"
-  else
-    echo ""
-    echo_info "4. Internet Interface Selection"
-    echo "Available WiFi interfaces:"
-    for i in "${!wifi_interfaces[@]}"; do
-      echo "  $((i+1)). ${wifi_interfaces[i]}"
-    done
-    
-    while true; do
-      read -rp "Select WiFi interface for internet connection (1-${#wifi_interfaces[@]}): " selection
-      if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#wifi_interfaces[@]} )); then
-        wifi_interface="${wifi_interfaces[$((selection-1))]}"
-        break
-      else
-        echo_warn "Invalid selection. Please choose 1-${#wifi_interfaces[@]}."
-      fi
-    done
-  fi
+  wifi_interface="${wifi_interfaces[0]}"
+  echo_info "Using WiFi interface: $wifi_interface"
 fi
 
 # --- Save Configuration --------------------------------------------------
