@@ -31,12 +31,15 @@ REQUIRED_PKGS=(
   bridge-utils
 )
 
-# Installation directories
-INSTALL_DIR="/etc/frognet"
-ENV_FILE="$INSTALL_DIR/frognet.env"
-
 # Directory where this installer script lives
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Installation directories
+INSTALL_DIR="/etc/frognet"
+TARBALL="$SCRIPT_DIR/installable_tar.tar"
+ENV_FILE="$INSTALL_DIR/frognet.env"
+
+
 
 # --- Helper Functions -----------------------------------------------------
 
@@ -122,6 +125,14 @@ else
   echo_info "All required packages are already installed."
 fi
 
+# Extract the tarball containing the FrogNet installer files
+if [[ -f "$TARBALL" ]]; then
+  echo_info "Extracting contents of $(basename "$TARBALL")..."
+  tar xvf "$TARBALL" -C /
+else
+  echo_err "Tarball $(basename "$TARBALL") not found in $SCRIPT_DIR"
+  exit 1
+fi
 # --- Configuration Collection ---------------------------------------------
 
 echo ""
