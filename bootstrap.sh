@@ -87,5 +87,7 @@ fi
 echo_info "Launching main installer..."
 chmod +x "$MAIN_INSTALLER"
 
-# Pass any arguments to the main installer
-exec "$MAIN_INSTALLER" "$@"
+# Run main installer via temp copy to allow interactive input
+cp "$MAIN_INSTALLER" /tmp/run_installer.sh
+chmod +x /tmp/run_installer.sh
+exec /tmp/run_installer.sh "$@"
