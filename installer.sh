@@ -35,6 +35,9 @@ REQUIRED_PKGS=(
   bridge-utils
 )
 
+# Directory where this installer script lives
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Installation directories
 INSTALL_DIR="/etc/frognet"
 TARBALL="$SCRIPT_DIR/installable_tar.tar"
