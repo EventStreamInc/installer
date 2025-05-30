@@ -74,9 +74,9 @@ check_ip_conflict() {
 }
 
 # --- Pre-flight Checks ---------------------------------------------------
-
-echo_info "FrogNet Phase 1 Installer - System Setup and Configuration"
-echo_info "=========================================================="
+echo_info " =========================================================="
+echo_info " FrogNet Phase 1 Installer - System Setup and Configuration"
+echo_info " =========================================================="
 echo ""
 
 # Ensure we're on a Debian/Ubuntu-like system
