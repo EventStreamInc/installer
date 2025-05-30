@@ -54,7 +54,7 @@ done
 echo_info "Cloning FrogNet installer repository..."
 
 rm -rf "$TEMP_DIR"
-if ! git clone --branch "$GITHUB_BRANCH" --depth 1 "https://github.com/${GITHUB_REPO}.git" "$TEMP_DIR"; then
+if ! git clone --depth 1 "https://github.com/${GITHUB_REPO}.git" "$TEMP_DIR"; then
   echo_err "Failed to clone repository."
 fi
 
