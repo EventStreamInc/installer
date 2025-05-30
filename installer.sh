@@ -10,7 +10,6 @@ ENV_FILE="/etc/frognet/frognet.env"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 TARBALL="$SCRIPT_DIR/installable_tar.tar"
 MAP_SCRIPT="/usr/local/bin/mapInterfaces"
-START_SCRIPT_NAMES=("startFrog.bash" "startFrogNet.bash" "setup_lillypad.bash")
 REQUIRED_PKGS=(apache2 php jq iptables php-cgi network-manager dnsmasq inotify-tools python3 openssh-server net-tools)
 
 # --- Helpers ---
@@ -70,11 +69,6 @@ DEFAULT_IFACE=$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')
 read -rp "Enter the FrogNet-dedicated network interface [default: $DEFAULT_IFACE]: " iface_input
 FROGNET_INTERFACE=${iface_input:-$DEFAULT_IFACE}
 
-default_user=${SUDO_USER:-$(whoami)}
-echo "This is the user account that will manage FrogNet services."
-read -rp "Enter admin username [default: $default_user]: " user_input
-FROGNET_USERNAME=${user_input:-$default_user}
-
 echo "This is the local domain this FrogNet node will serve (e.g., frognet.local)"
 read -rp "Enter your FrogNet domain name (FQDN) [default: frognet.local]: " domain_input
 FROGNET_DOMAIN=${domain_input:-frognet.local}
@@ -87,10 +81,10 @@ FROGNET_NODE_IP=${ip_input:-10.8.8.1}
 mkdir -p "$(dirname "$ENV_FILE")"
 cat > "$ENV_FILE" <<EOF
 FROGNET_INTERFACE="$FROGNET_INTERFACE"
-FROGNET_USERNAME="$FROGNET_USERNAME"
 FROGNET_DOMAIN="$FROGNET_DOMAIN"
 FROGNET_NODE_IP="$FROGNET_NODE_IP"
 EOF
+
 echo_info "Configuration saved to $ENV_FILE"
 
 # --- Install Required Packages ---
@@ -106,33 +100,5 @@ else
   echo_info "All required packages present."
 fi
 
-# --- Schedule Post-Reboot Task ---
-INSTALLER=$(readlink -f "$0")
-echo "@reboot $INSTALLER --on-reboot" | { crontab -l 2>/dev/null || true; cat; } | crontab -
-echo_info "Scheduled post-reboot startup via cron"
-
-# --- Handle Reboot Flag ---
-on_reboot=false
-if [[ "${1-}" == "--on-reboot" ]]; then
-  on_reboot=true
-fi
-
-if \$on_reboot; then
-  exec > >(tee -a /var/log/frognet-reboot.log) 2> >(tee -a /var/log/frognet-reboot.log >&2)
-  echo_info "=== Post-Reboot Initialization ==="
-  source "$ENV_FILE"
-  for name in "${START_SCRIPT_NAMES[@]}"; do
-    if [[ -x "$SCRIPT_DIR/$name" ]]; then
-      echo_info "Invoking $name..."
-      nohup "$SCRIPT_DIR/$name" > /var/log/frognet-start.log 2>&1 &
-      break
-    fi
-  done
-  ( crontab -l 2>/dev/null | grep -v "$0 --on-reboot" ) | crontab -
-  echo_info "Post-reboot startup complete."
-  exit 0
-fi
-
-# --- Final Step ---
-echo_info "Initial setup complete. Rebooting now to apply changes..."
-reboot
+# --- Done ---
+echo_info "DEBUG: FrogNet installation complete."
