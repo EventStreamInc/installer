@@ -33,6 +33,7 @@ REQUIRED_PKGS=(
 
 # Installation directories
 INSTALL_DIR="/etc/frognet"
+TARBALL="$SCRIPT_DIR/installable_tar.tar"
 ENV_FILE="$INSTALL_DIR/frognet.env"
 
 # Directory where this installer script lives
