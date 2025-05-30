@@ -65,7 +65,7 @@ done
 echo_info "All required tools are available."
 
 # --- Clone Repository -----------------------------------------------------
-echo_info "Cloning FrogNet installer repository..."
+echo_info "Cloning FrogNet installer repository . . ."
 
 # Clean up any previous installation attempts
 rm -rf "$TEMP_DIR"
