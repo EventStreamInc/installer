@@ -74,7 +74,7 @@ fi
 echo_info "Download complete."
 
 # --- Launch Main Installer -----------------------------------------------
-MAIN_INSTALLER="$TEMP_DIR/install.sh"
+MAIN_INSTALLER="$TEMP_DIR/installer.sh"
 
 if [[ ! -f "$MAIN_INSTALLER" ]]; then
   echo_err "Main installer script not found at $MAIN_INSTALLER"
