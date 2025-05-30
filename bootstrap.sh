@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # bootstrap.sh - FrogNet Bootstrap Installer
-# Usage: curl -fsSL https://raw.githubusercontent.com/EventStreamInc/installer/main/bootstrap.sh | sudo bash
+# Usage: curl -fsSL https://raw.githubusercontent.com/EventStreamInc/installer/jeremy/bootstrap.sh | sudo bash
 #
 # This script:
 # 1. Verifies system requirements
@@ -11,7 +11,7 @@ set -euo pipefail
 
 # --- Constants -------------------------------------------------------------
 GITHUB_REPO="EventStreamInc/installer"
-GITHUB_BRANCH="main"
+GITHUB_BRANCH="jeremy"
 TEMP_DIR="/tmp/frognet-install"
 INSTALLER_URL="https://github.com/${GITHUB_REPO}/archive/${GITHUB_BRANCH}.tar.gz"
 
@@ -35,7 +35,7 @@ echo_info "=========================="
 
 # Check if running as root
 if (( EUID != 0 )); then
-  echo_err "Must be run as root. Please re-run with: curl -fsSL <url> | sudo bash"
+  echo_err "Must be run as root. Please re-run with: curl -fsSL https://raw.githubusercontent.com/EventStreamInc/installer/jeremy/bootstrap.sh | sudo bash"
 fi
 
 # Check OS compatibility
