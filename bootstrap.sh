@@ -68,6 +68,21 @@ fi
 echo_info "Extracting $INSTALL_TARBALL to $INSTALL_DEST ..."
 tar -xvf "$TEMP_DIR/$INSTALL_TARBALL" -C "$INSTALL_DEST"
 
+MAP_FILE="/usr/local/bin/mapInterfaces"
+
+# Patch mapInterfaces for correct interface names
+if [[ -f "$MAP_FILE" ]]; then
+  echo_info "Patching mapInterfaces for correct interface names..."
+
+  sed -i 's/^export wlan0Name=.*/export wlan0Name="wlan0"/' "$MAP_FILE"
+  sed -i 's/^export wlan1Name=.*/export wlan1Name=""/' "$MAP_FILE"
+
+  echo_info "mapInterfaces updated:"
+  grep -E 'wlan0Name|wlan1Name' "$MAP_FILE"
+else
+  echo_warn "mapInterfaces file not found at $MAP_FILE — skipping patch."
+fi
+
 # --- Default Configuration ------------------------------------------------
 FROGNET_DOMAIN="${FROGNET_DOMAIN:-frognet.local}"
 FROGNET_NODE_IP="${FROGNET_NODE_IP:-10.2.2.1}"
