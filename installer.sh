@@ -1,20 +1,17 @@
 #!/usr/bin/env bash
-# installFrog.sh — FrogNet Phase 1 installer
-# This script will:
-#   1. Verify we're on Debian/Ubuntu and running as root
-#   2. Update system packages
-#   3. Install any missing OS packages needed by FrogNet
-#   4. Prompt the user for FrogNet configuration values with clear explanations
-#   5. Save those values to /etc/frognet/frognet.env
-#   6. Copy all installer files to /etc/frognet for Phase 2
-#   7. Set up Phase 2 to run after reboot
+# installer.sh - FrogNet Complete Installer
+# This script handles the complete FrogNet installation process based on 
+# lessons learned from troubleshooting sessions.
 #
-# Phase 2 will handle all FrogNet network configuration, service setup, etc.
+# Key fixes implemented:
+# - Automatic IP forwarding enablement 
+# - Proper mapInterfaces file generation
+# - Clean DNS configuration to prevent malformed entries
+# - Integrated lillypad setup with user configuration
+#
 set -euo pipefail
 
 # --- Constants -------------------------------------------------------------
-
-# List of Debian/Ubuntu packages FrogNet requires
 REQUIRED_PKGS=(
   apache2
   php
@@ -29,44 +26,57 @@ REQUIRED_PKGS=(
   net-tools
   hostapd
   bridge-utils
+  git
 )
 
-# Installation directories
 INSTALL_DIR="/etc/frognet"
 ENV_FILE="$INSTALL_DIR/frognet.env"
-
-# Directory where this installer script lives
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # --- Helper Functions -----------------------------------------------------
-
-# Print an error message in red, then exit
 echo_err() {
   echo -e "\033[1;31mERROR:\033[0m $*" >&2
   exit 1
 }
 
-# Print an informational message in green
 echo_info() {
   echo -e "\033[1;32m[*]\033[0m $*"
 }
 
-# Print a warning in yellow
 echo_warn() {
   echo -e "\033[1;33m[!]\033[0m $*"
 }
 
-# Generate a random IP in the 10.x.x.x range to avoid conflicts
+echo_success() {
+  echo -e "\033[1;32m✅\033[0m $*"
+}
+
+prompt_with_default() {
+  local prompt="$1"
+  local default="$2"
+  local result
+  
+  read -rp "$prompt [default: $default]: " result
+  echo "${result:-$default}"
+}
+
+validate_ip() {
+  local ip="$1"
+  if [[ $ip =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
+    return 0
+  else
+    return 1
+  fi
+}
+
 generate_random_ip() {
   echo "10.$((RANDOM % 254 + 1)).$((RANDOM % 254 + 1)).1"
 }
 
-# Check if an IP range conflicts with existing interfaces
 check_ip_conflict() {
   local test_ip="$1"
   local network=$(echo "$test_ip" | cut -d. -f1-3).0/24
   
-  # Check if this network is already in use
   if ip route show | grep -q "$network"; then
     return 1  # Conflict found
   fi
@@ -74,9 +84,9 @@ check_ip_conflict() {
 }
 
 # --- Pre-flight Checks ---------------------------------------------------
-echo_info " =========================================================="
-echo_info " FrogNet Phase 1 Installer - System Setup and Configuration"
-echo_info " =========================================================="
+echo_info "=========================================================="
+echo_info "FrogNet Complete Installer - System Setup and Configuration"
+echo_info "=========================================================="
 echo ""
 
 # Ensure we're on a Debian/Ubuntu-like system
@@ -85,20 +95,20 @@ if [[ ! -f /etc/os-release ]]; then
 fi
 
 source /etc/os-release
-if [[ ! "$ID" =~ ^(debian|ubuntu)$ ]]; then
-  echo_err "This installer only supports Debian/Ubuntu systems. Detected: $ID"
+if [[ ! "$ID" =~ ^(debian|ubuntu|raspbian)$ ]]; then
+  echo_err "This installer only supports Debian/Ubuntu/Raspbian systems. Detected: $ID"
 fi
+
+echo_info "Detected OS: $PRETTY_NAME"
 
 # Ensure script is run as root
 if (( EUID != 0 )); then
   echo_err "Must be run as root. Please re-run with: sudo $0"
 fi
 
-# Get the original user who ran sudo (for later use)
 ORIGINAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo 'unknown')}"
 
-# --- System Updates and Package Installation -------------------------------
-
+# --- System Updates and Package Installation -----------------------------
 echo_info "Updating system packages..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
@@ -106,7 +116,7 @@ apt-get update -qq
 echo_info "Upgrading existing packages..."
 apt-get upgrade -y -qq
 
-# Check which packages are missing
+# Install missing packages
 missing=()
 for pkg in "${REQUIRED_PKGS[@]}"; do
   if ! dpkg -s "$pkg" &>/dev/null; then
@@ -114,7 +124,6 @@ for pkg in "${REQUIRED_PKGS[@]}"; do
   fi
 done
 
-# Install missing packages
 if (( ${#missing[@]} > 0 )); then
   echo_info "Installing missing packages: ${missing[*]}"
   apt-get install -y -qq "${missing[@]}"
@@ -122,31 +131,73 @@ else
   echo_info "All required packages are already installed."
 fi
 
-# --- Configuration Collection ---------------------------------------------
+# --- CRITICAL FIX: Enable IP Forwarding ----------------------------------
+echo_info "Configuring IP forwarding (CRITICAL for internet sharing)..."
 
+# Check if ip_forward is present and uncommented
+if grep -q "^net.ipv4.ip_forward=1" /etc/sysctl.conf; then
+  echo_info "IP forwarding already enabled."
+elif grep -q "^#net.ipv4.ip_forward=1" /etc/sysctl.conf; then
+  echo_info "Enabling IP forwarding (uncommenting existing line)..."
+  sed -i 's/^#net.ipv4.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+elif grep -q "net.ipv4.ip_forward" /etc/sysctl.conf; then
+  echo_info "Updating existing IP forwarding setting..."
+  sed -i 's/^.*net.ipv4.ip_forward.*$/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+else
+  echo_info "Adding IP forwarding setting..."
+  echo "net.ipv4.ip_forward=1" >> /etc/sysctl.conf
+fi
+
+# Apply immediately without reboot
+echo 1 > /proc/sys/net/ipv4/ip_forward
+echo_success "IP forwarding enabled!"
+
+# --- Network Interface Discovery -----------------------------------------
+echo_info "Discovering network interfaces..."
+
+# Find available interfaces
+available_interfaces=($(ip -o link show | awk -F': ' '{print $2}' | grep -v lo))
+wifi_interfaces=($(iwconfig 2>/dev/null | grep -o '^[a-zA-Z0-9]*' || true))
+
+echo_info "Available network interfaces: ${available_interfaces[*]}"
+if (( ${#wifi_interfaces[@]} > 0 )); then
+  echo_info "WiFi interfaces detected: ${wifi_interfaces[*]}"
+fi
+
+# Find the interface with default route (internet connection)
+DEFAULT_INTERNET_IFACE="$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')"
+
+# --- User Configuration --------------------------------------------------
 echo ""
-echo_info "FrogNet Configuration Setup"
-echo_info "==========================="
-echo ""
-echo "FrogNet creates a local network that other devices can connect to."
-echo "This network will have its own domain name and IP address range."
-echo "You'll need to provide some basic configuration information."
+echo_info "FrogNet Configuration"
+echo_info "===================="
+echo_info "Please provide the following configuration details:"
 echo ""
 
-# 1. Network domain name (what users will see when connecting)
-echo "1. NETWORK DOMAIN NAME"
-echo "   This is the name that will appear when users search for WiFi networks."
-echo "   It's also the local domain name for this FrogNet node."
-echo ""
-read -rp "Enter the domain name for this FrogNet network [default: FrogNet-001]: " domain_input
-FROGNET_DOMAIN="${domain_input:-FrogNet-001}"
+# 1. Access Point Name (SSID)
+echo_info "1. Access Point Configuration"
+echo "This will be the WiFi network name that devices connect to."
+ap_name=$(prompt_with_default "Access Point Name (SSID)" "FrogNet-$(hostname)")
 
-# 2. Node IP address (avoid conflicts)
+# 2. Access Point Password (optional)
 echo ""
-echo "2. NODE IP ADDRESS"
-echo "   This is the IP address this FrogNet node will use on its local network."
-echo "   It should not conflict with your existing network ranges."
+echo "WiFi Password (leave empty for open network - not recommended):"
+read -rsp "Access Point Password (8+ characters): " ap_password
 echo ""
+if [[ -n "$ap_password" && ${#ap_password} -lt 8 ]]; then
+  echo_err "Password must be at least 8 characters long"
+fi
+
+# 3. Domain name
+echo ""
+echo_info "2. Network Configuration"
+echo "This is the local domain name for this FrogNet node."
+domain=$(prompt_with_default "Local domain name" "${ap_name,,}")  # lowercase version of AP name
+
+# 4. FrogNet subnet IP (auto-generate non-conflicting)
+echo ""
+echo "FrogNet Subnet Configuration:"
+echo "This node needs its own IP address on the FrogNet subnet."
 
 # Generate a default IP that doesn't conflict
 DEFAULT_NODE_IP=""
@@ -158,135 +209,242 @@ for attempt in {1..10}; do
   fi
 done
 
-# Fallback if we couldn't find a non-conflicting IP
 if [[ -z "$DEFAULT_NODE_IP" ]]; then
-  DEFAULT_NODE_IP="10.10.10.1"
-  echo_warn "Could not auto-generate non-conflicting IP. Using default: $DEFAULT_NODE_IP"
-  echo_warn "Please verify this doesn't conflict with your existing networks."
+  DEFAULT_NODE_IP="10.8.8.1"
+  echo_warn "Could not auto-generate non-conflicting IP. Using: $DEFAULT_NODE_IP"
 fi
 
-read -rp "Enter the IP address for this node [default: $DEFAULT_NODE_IP]: " ip_input
-FROGNET_NODE_IP="${ip_input:-$DEFAULT_NODE_IP}"
-
-# Validate IP format
-if ! [[ $FROGNET_NODE_IP =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-  echo_err "Invalid IP address format: $FROGNET_NODE_IP"
-fi
-
-# 3. Network interface selection
-echo ""
-echo "3. UPSTREAM NETWORK INTERFACE"
-echo "   This is the network interface that connects to the internet."
-echo "   FrogNet will share this connection with devices that connect to it."
-echo ""
-
-# Find the interface with the default route
-DEFAULT_IFACE="$(ip route 2>/dev/null | awk '/^default/ {print $5; exit}')"
-if [[ -z "$DEFAULT_IFACE" ]]; then
-  DEFAULT_IFACE="wlan0"  # Reasonable fallback for Pi
-fi
-
-# Show available interfaces
-echo "Available network interfaces:"
-ip link show | grep -E '^[0-9]+:' | while IFS=': ' read num iface rest; do
-  if [[ "$iface" != "lo" ]]; then
-    status=""
-    if ip addr show "$iface" | grep -q "inet "; then
-      status=" (has IP)"
-    fi
-    echo "  - $iface$status"
+while true; do
+  frognet_ip=$(prompt_with_default "FrogNet subnet gateway IP" "$DEFAULT_NODE_IP")
+  if validate_ip "$frognet_ip"; then
+    break
+  else
+    echo_warn "Invalid IP address format. Please try again."
   fi
 done
+
+# Extract subnet base from IP (e.g., 10.8.8.1 -> 10.8.8)
+subnet_base="${frognet_ip%.*}"
+
+# 5. Ethernet interface (for FrogNet subnet)
 echo ""
+echo_info "3. Interface Configuration"
+echo "Select which interface will serve the FrogNet subnet (usually eth0):"
 
-read -rp "Enter the upstream network interface [default: $DEFAULT_IFACE]: " iface_input
-FROGNET_INTERFACE="${iface_input:-$DEFAULT_IFACE}"
-
-# Verify the interface exists
-if ! ip link show "$FROGNET_INTERFACE" &>/dev/null; then
-  echo_err "Network interface '$FROGNET_INTERFACE' does not exist."
+if (( ${#available_interfaces[@]} == 1 )); then
+  eth_interface="${available_interfaces[0]}"
+  echo_info "Using interface: $eth_interface"
+else
+  echo "Available interfaces:"
+  for i in "${!available_interfaces[@]}"; do
+    interface="${available_interfaces[i]}"
+    status=""
+    if [[ "$interface" == "$DEFAULT_INTERNET_IFACE" ]]; then
+      status=" (currently has internet)"
+    elif ip addr show "$interface" | grep -q "inet "; then
+      status=" (has IP)"
+    fi
+    echo "  $((i+1)). $interface$status"
+  done
+  
+  while true; do
+    read -rp "Select ethernet interface for FrogNet subnet (1-${#available_interfaces[@]}): " selection
+    if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#available_interfaces[@]} )); then
+      eth_interface="${available_interfaces[$((selection-1))]}"
+      break
+    else
+      echo_warn "Invalid selection. Please choose 1-${#available_interfaces[@]}."
+    fi
+  done
 fi
 
+# 6. Internet interface (WiFi for upstream)
+wifi_interface=""
+if [[ -n "$DEFAULT_INTERNET_IFACE" ]]; then
+  wifi_interface="$DEFAULT_INTERNET_IFACE"
+  echo_info "Using internet interface: $wifi_interface"
+elif (( ${#wifi_interfaces[@]} > 0 )); then
+  if (( ${#wifi_interfaces[@]} == 1 )); then
+    wifi_interface="${wifi_interfaces[0]}"
+    echo_info "Using WiFi interface: $wifi_interface"
+  else
+    echo ""
+    echo_info "4. Internet Interface Selection"
+    echo "Available WiFi interfaces:"
+    for i in "${!wifi_interfaces[@]}"; do
+      echo "  $((i+1)). ${wifi_interfaces[i]}"
+    done
+    
+    while true; do
+      read -rp "Select WiFi interface for internet connection (1-${#wifi_interfaces[@]}): " selection
+      if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#wifi_interfaces[@]} )); then
+        wifi_interface="${wifi_interfaces[$((selection-1))]}"
+        break
+      else
+        echo_warn "Invalid selection. Please choose 1-${#wifi_interfaces[@]}."
+      fi
+    done
+  fi
+fi
 
+# --- Save Configuration --------------------------------------------------
+echo_info "Saving configuration..."
 
-# --- Save Configuration ---------------------------------------------------
-
-echo ""
-echo_info "Saving configuration to $ENV_FILE"
-
-# Create the installation directory
 mkdir -p "$INSTALL_DIR"
-
-# Write the environment file
-cat > "$ENV_FILE" <<EOF
-# FrogNet Phase 1 Configuration
+cat > "$ENV_FILE" << EOF
+# FrogNet Configuration
 # Generated on $(date)
-# 
-# This file contains the basic configuration for this FrogNet node.
-# Phase 2 will use these values to configure the network services.
+# Based on troubleshooting fixes by John W. Fawcett
 
-# Network Configuration
-FROGNET_DOMAIN="$FROGNET_DOMAIN"
-FROGNET_NODE_IP="$FROGNET_NODE_IP"
-FROGNET_INTERFACE="$FROGNET_INTERFACE"
+# Access Point Settings
+FROGNET_AP_NAME="$ap_name"
+FROGNET_AP_PASSWORD="$ap_password"
 
+# Network Settings
+FROGNET_DOMAIN="$domain"
+FROGNET_NODE_IP="$frognet_ip"
+FROGNET_SUBNET_BASE="$subnet_base"
 
+# Interface Settings  
+FROGNET_ETH_INTERFACE="$eth_interface"
+FROGNET_WIFI_INTERFACE="$wifi_interface"
+
+# Derived Settings
+FROGNET_DHCP_RANGE="$subnet_base.2,$subnet_base.254"
 
 # System Information
 INSTALL_DATE="$(date -Iseconds)"
-INSTALLER_VERSION="1.134"
+INSTALLER_VERSION="2.0-johns-fixes"
 ORIGINAL_USER="$ORIGINAL_USER"
 EOF
 
-# Set proper permissions
 chmod 600 "$ENV_FILE"
 chown root:root "$ENV_FILE"
 
-# --- Copy Installation Files ----------------------------------------------
+echo_success "Configuration saved to $ENV_FILE"
 
-echo_info "Copying installer files to $INSTALL_DIR"
+# --- Install FrogNet Files -----------------------------------------------
+echo_info "Installing FrogNet files..."
 
-# Remove any existing installation
-if [[ -d "$INSTALL_DIR" && "$INSTALL_DIR" != "$SCRIPT_DIR" ]]; then
-  echo_warn "Existing installation found. Backing up configuration..."
-  if [[ -f "$ENV_FILE" ]]; then
-    cp "$ENV_FILE" "${ENV_FILE}.backup.$(date +%s)"
-  fi
-fi
-
-# Copy all files from the current directory to the install directory
-# Use rsync to preserve permissions and handle the case where source = destination
+# Copy all files to install directory
 if [[ "$SCRIPT_DIR" != "$INSTALL_DIR" ]]; then
-  rsync -a --exclude="*.backup.*" "$SCRIPT_DIR"/ "$INSTALL_DIR"/
-  chown -R root:root "$INSTALL_DIR"
+  rsync -a --chown=root:root "$SCRIPT_DIR"/ "$INSTALL_DIR"/
 fi
 
-# Make sure scripts are executable
-chmod +x "$INSTALL_DIR"/*.sh 2>/dev/null || true
+# --- CRITICAL FIX: Create Proper mapInterfaces File ---------------------
+echo_info "Creating mapInterfaces file (fixes malformed DNS entries)..."
 
-# --- Configuration Summary ------------------------------------------------
+cat > "$INSTALL_DIR/usr/local/bin/mapInterfaces" << EOF
+#!/usr/bin/env bash
+# FrogNet Interface Mapping
+# Auto-generated by installer to prevent malformed entries
 
-echo ""
-echo_info "Configuration Summary"
-echo_info "===================="
-echo "Domain Name:      $FROGNET_DOMAIN"
-echo "Node IP:          $FROGNET_NODE_IP"  
-echo "Interface:        $FROGNET_INTERFACE"
-echo "Install Directory: $INSTALL_DIR"
-echo ""
+eth0Name="$eth_interface"
+wlan0Name="$wifi_interface"
+wlan1Name=""
 
+# Domain settings (prevent malformed entries)
+eth0InDomain=""
+wlan0InDomain=""  
+wlan1InDomain=""
+EOF
 
+chmod +x "$INSTALL_DIR/usr/local/bin/mapInterfaces"
+echo_success "mapInterfaces file created successfully!"
 
-# --- Completion -----------------------------------------------------------
+# --- Extract and Setup Tarball -------------------------------------------
+if [[ -f "$INSTALL_DIR/installable_tar.tar" ]]; then
+  echo_info "Extracting FrogNet system files..."
+  
+  cd /
+  tar xf "$INSTALL_DIR/installable_tar.tar"
+  
+  # Make scripts executable
+  chmod +x /usr/local/bin/*.sh 2>/dev/null || true
+  chmod +x /usr/local/bin/*.bash 2>/dev/null || true
+  
+  # Copy our fixed mapInterfaces to the live location
+  cp "$INSTALL_DIR/usr/local/bin/mapInterfaces" /usr/local/bin/mapInterfaces
+  
+  # Run the lillypad setup with user configuration
+  echo_info "Running FrogNet lillypad setup..."
+  cd /usr/local/bin
+  ./setup_lillypad.bash "$ap_name" "$frognet_ip"
+  
+  echo_success "FrogNet system files extracted and configured!"
+else
+  echo_warn "installable_tar.tar not found. Skipping tarball extraction."
+fi
 
+# --- Clean Up DNS Configuration ------------------------------------------
+echo_info "Cleaning up DNS configuration (prevents startup failures)..."
+
+if [[ -f /etc/dnsmasq.d/opts_only.conf ]]; then
+  # Remove any malformed entries that might have been generated
+  sed -i '/such\.\.\.1/d' /etc/dnsmasq.d/opts_only.conf
+  sed -i '/No\/such/d' /etc/dnsmasq.d/opts_only.conf
+  echo_success "DNS configuration cleaned!"
+fi
+
+# Remove any corrupted hosts/resolv.conf files and regenerate
+if [[ -f /usr/local/bin/mergeHostsAndResolve.bash ]]; then
+  echo_info "Regenerating clean hosts and resolv.conf files..."
+  cd /usr/local/bin
+  rm -f /etc/hosts /etc/resolv.conf /etc/sentinels/* 2>/dev/null || true
+  ./mergeHostsAndResolve.bash
+  echo_success "Clean network configuration generated!"
+fi
+
+# --- Start and Enable Services -------------------------------------------
+echo_info "Starting FrogNet services..."
+
+# Start and enable dnsmasq
+systemctl restart dnsmasq
+systemctl enable dnsmasq
+
+# Check if dnsmasq started successfully
+if systemctl is-active --quiet dnsmasq; then
+  echo_success "dnsmasq service started successfully!"
+else
+  echo_warn "dnsmasq service failed to start. Checking status..."
+  systemctl status dnsmasq --no-pager || true
+fi
+
+# --- Installation Complete -----------------------------------------------
 echo ""
-echo_info "✅ Phase 1 Complete!"
-echo_info "==================="
+echo_success "🎉 FrogNet installation complete!"
 echo ""
-echo "System has been updated and configured."
-echo "All FrogNet files have been copied to $INSTALL_DIR"
+echo_info "Configuration Summary:"
+echo_info "====================="
+echo_info "Access Point Name: $ap_name"
+echo_info "Domain: $domain"
+echo_info "Gateway IP: $frognet_ip"  
+echo_info "Ethernet Interface: $eth_interface"
+if [[ -n "$wifi_interface" ]]; then
+  echo_info "WiFi Interface: $wifi_interface"
+fi
+echo_info "DHCP Range: $subnet_base.2 - $subnet_base.254"
 echo ""
-echo "To complete FrogNet setup, run Phase 2:"
-echo "  cd $INSTALL_DIR"
-echo "  ./phase2_setup.sh"
+echo_info "Key Fixes Applied:"
+echo_info "✅ IP forwarding enabled (critical for internet sharing)"
+echo_info "✅ Clean mapInterfaces file (prevents DNS corruption)"
+echo_info "✅ Proper interface mapping"
+echo_info "✅ Clean DNS configuration"
 echo ""
+echo_info "Next Steps:"
+if [[ -n "$wifi_interface" && "$wifi_interface" != "$eth_interface" ]]; then
+  echo_info "1. Ensure $wifi_interface is connected to the internet"
+  echo_info "2. Connect devices to the FrogNet subnet via $eth_interface"
+else
+  echo_info "1. Connect your internet source to $eth_interface"
+fi
+echo_info "2. Connect devices to the '$ap_name' access point"
+echo_info "3. Devices will receive IP addresses in the $subnet_base.2-254 range"
+echo ""
+echo_warn "IMPORTANT: A system reboot is recommended to ensure all changes take effect."
+echo_info "Run: sudo reboot"
+echo ""
+echo_info "After reboot, check service status with:"
+echo_info "  sudo systemctl status dnsmasq"
+echo_info "  ip a"
+echo_info "  ip r"
