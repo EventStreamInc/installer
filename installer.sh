@@ -171,77 +171,140 @@ DEFAULT_INTERNET_IFACE="$(ip route 2>/dev/null | awk '/^default/ {print $5; exit
 echo ""
 echo_info "FrogNet Configuration"
 echo_info "===================="
+echo_info "Please provide the following configuration details:"
 echo ""
 
-# Use pre-configured values or sensible defaults
-ap_name="bob"  # Default AP name from troubleshooting session
-ap_password="frognet123"  # Default password
-domain="freddy"  # Default domain from troubleshooting
+# 1. Access Point Name (SSID)
+echo_info "1. Access Point Configuration"
+echo "This will be the WiFi network name that devices connect to."
+ap_name=$(prompt_with_default "Access Point Name (SSID)" "bob")
 
-echo_info "Using default configuration:"
-echo_info "Access Point Name: $ap_name"
-echo_info "Domain: $domain"
+# 2. Access Point Password (optional)
+echo ""
+echo "WiFi Password (leave empty for open network - not recommended):"
+echo -n "Access Point Password (8+ characters): "
+read -rs ap_password
 echo ""
 
-# 1. FrogNet subnet IP (auto-generate or use default from troubleshooting)
-echo_info "Network Configuration:"
+# Validate password if provided
+if [[ -n "$ap_password" && ${#ap_password} -lt 8 ]]; then
+  echo_err "Password must be at least 8 characters long"
+fi
+
+# 3. Domain name
+echo ""
+echo_info "2. Network Configuration"
+echo "This is the local domain name for this FrogNet node."
+domain=$(prompt_with_default "Local domain name" "freddy")
+
+# 4. FrogNet subnet IP
+echo ""
+echo "FrogNet Subnet Configuration:"
 echo "This node needs its own IP address on the FrogNet subnet."
 
-# Use default IP from troubleshooting session or auto-generate
+# Generate a default IP that doesn't conflict
 DEFAULT_NODE_IP="10.8.8.1"  # From successful troubleshooting session
 
-# Check if this IP conflicts, if so generate alternative
+# Check if this IP conflicts, if so suggest alternative
 if ! check_ip_conflict "$DEFAULT_NODE_IP"; then
-  echo_warn "Default IP $DEFAULT_NODE_IP conflicts with existing network"
-  for attempt in {1..10}; do
+  echo_warn "Default IP $DEFAULT_NODE_IP may conflict with existing network"
+  for attempt in {1..5}; do
     candidate_ip=$(generate_random_ip)
     if check_ip_conflict "$candidate_ip"; then
+      echo_info "Alternative suggestion: $candidate_ip"
       DEFAULT_NODE_IP="$candidate_ip"
-      echo_info "Using alternative IP: $DEFAULT_NODE_IP"
       break
     fi
   done
 fi
 
-frognet_ip="$DEFAULT_NODE_IP"
-echo_info "FrogNet gateway IP: $frognet_ip"
+while true; do
+  frognet_ip=$(prompt_with_default "FrogNet subnet gateway IP" "$DEFAULT_NODE_IP")
+  if validate_ip "$frognet_ip"; then
+    break
+  else
+    echo_warn "Invalid IP address format. Please try again."
+  fi
+done
 
 # Extract subnet base from IP (e.g., 10.8.8.1 -> 10.8.8)
 subnet_base="${frognet_ip%.*}"
 
-# 2. Interface configuration (auto-detect or use common defaults)
+# 5. Interface configuration
 echo ""
-echo_info "Interface Configuration:"
+echo_info "3. Interface Configuration"
+echo "Select which interface will serve the FrogNet subnet:"
 
-# Auto-detect ethernet interface (prefer eth0)
-if ip link show eth0 &>/dev/null; then
-  eth_interface="eth0"
-  echo_info "Using ethernet interface: $eth_interface"
-elif (( ${#available_interfaces[@]} > 0 )); then
-  # Use first available non-wifi interface
-  for iface in "${available_interfaces[@]}"; do
-    if [[ ! " ${wifi_interfaces[*]} " =~ " $iface " ]]; then
-      eth_interface="$iface"
+if (( ${#available_interfaces[@]} == 1 )); then
+  eth_interface="${available_interfaces[0]}"
+  echo_info "Using interface: $eth_interface"
+else
+  echo "Available interfaces:"
+  for i in "${!available_interfaces[@]}"; do
+    interface="${available_interfaces[i]}"
+    status=""
+    if [[ "$interface" == "$DEFAULT_INTERNET_IFACE" ]]; then
+      status=" (currently has internet)"
+    elif ip addr show "$interface" | grep -q "inet "; then
+      status=" (has IP)"
+    fi
+    echo "  $((i+1)). $interface$status"
+  done
+  
+  while true; do
+    read -rp "Select ethernet interface for FrogNet subnet (1-${#available_interfaces[@]}): " selection
+    if [[ "$selection" =~ ^[0-9]+$ ]] && (( selection >= 1 && selection <= ${#available_interfaces[@]} )); then
+      eth_interface="${available_interfaces[$((selection-1))]}"
       break
+    else
+      echo_warn "Invalid selection. Please choose 1-${#available_interfaces[@]}."
     fi
   done
-  echo_info "Using ethernet interface: $eth_interface"
-else
-  echo_err "No suitable ethernet interface found"
 fi
 
-# Auto-detect WiFi interface for internet connection
+# 6. WiFi interface for internet connection
+echo ""
+echo_info "4. Internet Interface Selection"
 wifi_interface=""
 if [[ -n "$DEFAULT_INTERNET_IFACE" ]]; then
-  wifi_interface="$DEFAULT_INTERNET_IFACE"
-  echo_info "Using internet interface: $wifi_interface"
-elif ip link show wlan0 &>/dev/null; then
-  wifi_interface="wlan0"
-  echo_info "Using WiFi interface: $wifi_interface"
-elif (( ${#wifi_interfaces[@]} > 0 )); then
-  wifi_interface="${wifi_interfaces[0]}"
-  echo_info "Using WiFi interface: $wifi_interface"
+  echo "Current internet interface detected: $DEFAULT_INTERNET_IFACE"
+  use_current=$(prompt_with_default "Use $DEFAULT_INTERNET_IFACE for internet connection? (y/n)" "y")
+  if [[ "$use_current" =~ ^[Yy] ]]; then
+    wifi_interface="$DEFAULT_INTERNET_IFACE"
+  fi
 fi
+
+if [[ -z "$wifi_interface" && ${#wifi_interfaces[@]} -gt 0 ]]; then
+  echo "Available WiFi interfaces:"
+  for i in "${!wifi_interfaces[@]}"; do
+    echo "  $((i+1)). ${wifi_interfaces[i]}"
+  done
+  echo "  $((${#wifi_interfaces[@]}+1)). None (manual configuration later)"
+  
+  while true; do
+    read -rp "Select WiFi interface for internet connection (1-$((${#wifi_interfaces[@]}+1))): " selection
+    if [[ "$selection" =~ ^[0-9]+$ ]]; then
+      if (( selection >= 1 && selection <= ${#wifi_interfaces[@]} )); then
+        wifi_interface="${wifi_interfaces[$((selection-1))]}"
+        break
+      elif (( selection == ${#wifi_interfaces[@]}+1 )); then
+        wifi_interface=""
+        echo_info "No WiFi interface selected - manual configuration required later"
+        break
+      fi
+    fi
+    echo_warn "Invalid selection. Please choose 1-$((${#wifi_interfaces[@]}+1))."
+  done
+fi
+
+# Detect wlan1 (second WiFi interface)
+wlan1_interface=""
+for iface in "${wifi_interfaces[@]}"; do
+  if [[ "$iface" != "$wifi_interface" ]]; then
+    wlan1_interface="$iface"
+    break
+  fi
+done
 
 # --- Save Configuration --------------------------------------------------
 echo_info "Saving configuration..."
@@ -268,6 +331,11 @@ FROGNET_WIFI_INTERFACE="$wifi_interface"
 # Derived Settings
 FROGNET_DHCP_RANGE="$subnet_base.2,$subnet_base.254"
 
+# Detected Interfaces (for debugging)
+DETECTED_ETH_INTERFACE="$eth_interface"
+DETECTED_WIFI_INTERFACE="$wifi_interface"
+DETECTED_WLAN1_INTERFACE="$wlan1_interface"
+
 # System Information
 INSTALL_DATE="$(date -Iseconds)"
 INSTALLER_VERSION="2.0-johns-fixes"
@@ -287,49 +355,59 @@ if [[ "$SCRIPT_DIR" != "$INSTALL_DIR" ]]; then
   rsync -a --chown=root:root "$SCRIPT_DIR"/ "$INSTALL_DIR"/
 fi
 
-# --- CRITICAL FIX: Create Proper mapInterfaces File ---------------------
-echo_info "Creating mapInterfaces file (fixes malformed DNS entries)..."
+# --- CRITICAL FIX: Update Existing mapInterfaces File --------------------
+echo_info "Updating mapInterfaces file (preserving existing structure)..."
 
-cat > "$INSTALL_DIR/usr/local/bin/mapInterfaces" << EOF
-#!/usr/bin/env bash
-# FrogNet Interface Mapping
-# Auto-generated by installer to prevent malformed entries
-
-eth0Name="$eth_interface"
-wlan0Name="$wifi_interface"
-wlan1Name=""
-
-# Domain settings (prevent malformed entries)
-eth0InDomain=""
-wlan0InDomain=""  
-wlan1InDomain=""
-EOF
-
-chmod +x "$INSTALL_DIR/usr/local/bin/mapInterfaces"
-echo_success "mapInterfaces file created successfully!"
-
-# --- Extract and Setup Tarball -------------------------------------------
+# First extract the tar if it exists to get the mapInterfaces file
 if [[ -f "$INSTALL_DIR/installable_tar.tar" ]]; then
   echo_info "Extracting FrogNet system files..."
-  
   cd /
   tar xf "$INSTALL_DIR/installable_tar.tar"
   
   # Make scripts executable
   chmod +x /usr/local/bin/*.sh 2>/dev/null || true
   chmod +x /usr/local/bin/*.bash 2>/dev/null || true
+fi
+
+# Now update the mapInterfaces file if it exists
+if [[ -f /usr/local/bin/mapInterfaces ]]; then
+  echo_info "Updating existing mapInterfaces file with detected interfaces..."
   
-  # Copy our fixed mapInterfaces to the live location
-  cp "$INSTALL_DIR/usr/local/bin/mapInterfaces" /usr/local/bin/mapInterfaces
+  # Update eth0Name
+  sed -i "s/^export eth0Name=.*/export eth0Name=\"$eth_interface\"/" /usr/local/bin/mapInterfaces
+  
+  # Update wlan0Name (internet interface)
+  if [[ -n "$wifi_interface" ]]; then
+    sed -i "s/^export wlan0Name=.*/export wlan0Name=\"$wifi_interface\"/" /usr/local/bin/mapInterfaces
+  else
+    sed -i "s/^export wlan0Name=.*/export wlan0Name=\"\"/" /usr/local/bin/mapInterfaces
+  fi
+  
+  # Update wlan1Name (second WiFi interface or empty)
+  if [[ -n "$wlan1_interface" ]]; then
+    sed -i "s/^export wlan1Name=.*/export wlan1Name=\"$wlan1_interface\"/" /usr/local/bin/mapInterfaces
+  else
+    sed -i "s/^export wlan1Name=.*/export wlan1Name=\"\"/" /usr/local/bin/mapInterfaces
+  fi
+  
+  echo_success "mapInterfaces file updated successfully!"
+  echo_info "Current interface mapping:"
+  echo_info "  eth0Name: $eth_interface"
+  echo_info "  wlan0Name: ${wifi_interface:-\"\"}"
+  echo_info "  wlan1Name: ${wlan1_interface:-\"\"}"
+else
+  echo_warn "mapInterfaces file not found at /usr/local/bin/mapInterfaces"
+  echo_warn "This may cause issues with the FrogNet setup"
+fi
   
   # Run the lillypad setup with user configuration
   echo_info "Running FrogNet lillypad setup..."
   cd /usr/local/bin
   ./setup_lillypad.bash "$ap_name" "$frognet_ip"
   
-  echo_success "FrogNet system files extracted and configured!"
+  echo_success "FrogNet system configured successfully!"
 else
-  echo_warn "installable_tar.tar not found. Skipping tarball extraction."
+  echo_warn "installable_tar.tar not found. Skipping FrogNet setup."
 fi
 
 # --- Clean Up DNS Configuration ------------------------------------------
@@ -390,7 +468,7 @@ echo ""
 echo_info "Next Steps:"
 if [[ -n "$wifi_interface" && "$wifi_interface" != "$eth_interface" ]]; then
   echo_info "1. Ensure $wifi_interface is connected to the internet"
-  echo_info "2. Connect devices to the FrogNet subnet via $eth_interface"
+  echo_info "2. Connect devices to the FrogNet  subnet via $eth_interface"
 else
   echo_info "1. Connect your internet source to $eth_interface"
 fi
