@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # bootstrap.sh - FrogNet Bootstrap Installer
 # Usage: curl -fsSL https://raw.githubusercontent.com/EventStreamInc/installer/jeremy/bootstrap.sh | sudo bash
+# Alternative: wget -qO- https://raw.githubusercontent.com/EventStreamInc/installer/jeremy/bootstrap.sh | sudo bash
 #
 # This script:
 # 1. Verifies system requirements
@@ -13,7 +14,7 @@ set -euo pipefail
 GITHUB_REPO="EventStreamInc/installer"
 GITHUB_BRANCH="jeremy"
 TEMP_DIR="/tmp/frognet-install"
-INSTALLER_URL="https://github.com/${GITHUB_REPO}/archive/${GITHUB_BRANCH}.tar.gz"
+REPO_URL="https://github.com/${GITHUB_REPO}.git"
 
 # --- Helper Functions -----------------------------------------------------
 echo_err() {
@@ -50,8 +51,10 @@ fi
 
 echo_info "Detected OS: $PRETTY_NAME"
 
-# Check for required tools
-for tool in curl tar; do
+# Check for required tools and install if missing
+echo_info "Checking for required tools..."
+
+for tool in git; do
   if ! command -v "$tool" &>/dev/null; then
     echo_info "Installing missing tool: $tool"
     apt-get update -qq
@@ -59,19 +62,20 @@ for tool in curl tar; do
   fi
 done
 
-# --- Download Main Installer ---------------------------------------------
-echo_info "Downloading FrogNet installer from GitHub..."
+echo_info "All required tools are available."
+
+# --- Clone Repository -----------------------------------------------------
+echo_info "Cloning FrogNet installer repository..."
 
 # Clean up any previous installation attempts
 rm -rf "$TEMP_DIR"
-mkdir -p "$TEMP_DIR"
 
-# Download and extract
-if ! curl -fsSL "$INSTALLER_URL" | tar -xz -C "$TEMP_DIR" --strip-components=1; then
-  echo_err "Failed to download installer from $INSTALLER_URL"
+# Clone the repository
+if ! git clone --branch "$GITHUB_BRANCH" --depth 1 "$REPO_URL" "$TEMP_DIR"; then
+  echo_err "Failed to clone repository from $REPO_URL (branch: $GITHUB_BRANCH)"
 fi
 
-echo_info "Download complete."
+echo_info "Repository cloned successfully."
 
 # --- Launch Main Installer -----------------------------------------------
 MAIN_INSTALLER="$TEMP_DIR/installer.sh"
