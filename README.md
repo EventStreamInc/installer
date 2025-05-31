@@ -12,9 +12,10 @@ This script sets up a FrogNet node on a compatible Linux machine.
 - A router in **Access Point (Gateway/Passive)** mode
 - Internet access during install
 
+
+``curl -fsSL https://raw.githubusercontent.com/EventStreamInc/installer/jeremy/bootstrap.sh | sudo bash``
 Tested on:
 - Raspberry Pi 4
-- Intel NUC
 
 ---
 
