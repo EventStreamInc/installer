@@ -154,3 +154,19 @@ if $NEEDS_REPAIR; then
 else
   echo_info "Network appears to be functioning. No repair needed."
 fi
+
+# --- Final Setup Message and Reboot ---------------------------------------
+
+echo_warn "No automated network repair will be attempted."
+
+echo_info "IMPORTANT: Please make sure the Ethernet cable is plugged in."
+echo_info "The system will wait 30 seconds, then reboot automatically..."
+
+for i in {30..1}; do
+  printf "\rRebooting in %2d seconds... Press Ctrl+C to cancel." "$i"
+  sleep 1
+done
+
+echo -e "\n"
+echo_info "Rebooting now!"
+reboot
