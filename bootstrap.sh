@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+echo -e "\n"
+cat <<'EOF'
 ##############################################################
 #                                                            #
 #  Copyright (c) 2025, Fawcett Innovations, LLC              #
@@ -13,7 +15,8 @@
 #     contact@fawcettinnovations.com                         #
 #                                                            #
 ##############################################################
-
+EOF
+echo -e "\n"
 # bootstrap.sh - FrogNet Full Bootstrap Installer
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/EventStreamInc/installer/jeremy/bootstrap.sh | sudo bash
@@ -33,7 +36,8 @@ echo_err() { echo -e "\033[1;31mERROR:\033[0m $*" >&2; exit 1; }
 echo_info() { echo -e "[\ \033[1;32m*\033[0m\ ] $*"; }
 echo_warn() { echo -e "\033[1;33m[!]\033[0m $*"; }
 
-# --- Pre-flight Checks ---------------------------------------------------
+# ------------------------------------------------------
+echo_info "=========================="
 echo_info "FrogNet Bootstrap Installer"
 echo_info "=========================="
 
