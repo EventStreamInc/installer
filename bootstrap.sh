@@ -1,4 +1,19 @@
 #!/usr/bin/env bash
+##############################################################
+#                                                            #
+#  Copyright (c) 2025, Fawcett Innovations, LLC              #
+#  All Rights Reserved                                       #
+#                                                            #
+#  This software is proprietary and confidential.            #
+#  Unauthorized copying, distribution, or use of this        #
+#  code, via any medium, is strictly prohibited.             #
+#                                                            #
+#  If you wish to license this software or use it in a       #
+#  commercial or non-commercial project, please contact:     #
+#     contact@fawcettinnovations.com                         #
+#                                                            #
+##############################################################
+
 # bootstrap.sh - FrogNet Full Bootstrap Installer
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/EventStreamInc/installer/jeremy/bootstrap.sh | sudo bash
@@ -15,7 +30,7 @@ REQUIRED_PKGS=(git apache2 php jq iptables php-cgi network-manager dnsmasq inoti
 
 # --- Helper Functions -----------------------------------------------------
 echo_err() { echo -e "\033[1;31mERROR:\033[0m $*" >&2; exit 1; }
-echo_info() { echo -e "\033[1;32m[*]\033[0m $*"; }
+echo_info() { echo -e "[\033[1;32m*\033[0m] $*"; }
 echo_warn() { echo -e "\033[1;33m[!]\033[0m $*"; }
 
 # --- Pre-flight Checks ---------------------------------------------------
@@ -98,6 +113,9 @@ fi
 
 # --- IPV4 Forwarding -------------------------------------------
 sudo sed -i 's/^#\?net\.ipv4\.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+sudo sysctl -w net.ipv4.ip_forward=1
+sudo sysctl -p /etc/sysctl.conf
+
 
 # --- Final Network Sanity Check -------------------------------------------
 echo_info "Running final network fixups..."
