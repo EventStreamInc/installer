@@ -14,6 +14,8 @@ This script sets up a FrogNet node on a compatible Linux machine.
 
 
 ``curl -fsSL https://raw.githubusercontent.com/EventStreamInc/installer/jeremy/bootstrap.sh | sudo bash``
+
+
 Tested on:
 - Raspberry Pi 4
 
