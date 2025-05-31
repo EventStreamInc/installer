@@ -30,7 +30,7 @@ REQUIRED_PKGS=(git apache2 php jq iptables php-cgi network-manager dnsmasq inoti
 
 # --- Helper Functions -----------------------------------------------------
 echo_err() { echo -e "\033[1;31mERROR:\033[0m $*" >&2; exit 1; }
-echo_info() { echo -e "[\033[1;32m*\033[0m] $*"; }
+echo_info() { echo -e "[ \033[1;32m*\033[0m ] $*"; }
 echo_warn() { echo -e "\033[1;33m[!]\033[0m $*"; }
 
 # --- Pre-flight Checks ---------------------------------------------------
