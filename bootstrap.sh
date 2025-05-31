@@ -96,6 +96,9 @@ else
   echo_err "setup_lillypad.bash not found or not executable at /usr/local/bin/"
 fi
 
+# --- IPV4 Forwarding -------------------------------------------
+sudo sed -i 's/^#\?net\.ipv4\.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
+
 # --- Final Network Sanity Check -------------------------------------------
 echo_info "Running final network fixups..."
 
