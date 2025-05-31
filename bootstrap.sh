@@ -144,7 +144,7 @@ if $NEEDS_REPAIR; then
   service NetworkManager restart
   service dnsmasq restart
 
-  sleep 2
+  sleep 20
 
   if ping -c1 8.8.8.8 &>/dev/null; then
     echo_info "Network repair successful: ping working."
