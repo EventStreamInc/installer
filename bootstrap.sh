@@ -38,7 +38,7 @@ echo_warn() { echo -e "\033[1;33m[!]\033[0m $*"; }
 
 # ------------------------------------------------------
 echo "===================================================="
-echo "\t FrogNet Full Bootstrap Installer"
+echo "     FrogNet Full Bootstrap Installer"
 echo "===================================================="
 
 if (( EUID != 0 )); then
