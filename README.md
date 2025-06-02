@@ -1,20 +1,15 @@
 # 🐸 FrogNet Installer
-```
-##############################################################
-#                                                            #
-#  Copyright (c) 2025, Fawcett Innovations, LLC              #
-#  All Rights Reserved                                       #
-#                                                            #
-#  This software is proprietary and confidential.            #
-#  Unauthorized copying, distribution, or use of this        #
-#  code, via any medium, is strictly prohibited.             #
-#                                                            #
-#  If you wish to license this software or use it in a       #
-#  commercial or non-commercial project, please contact:     #
-#     contact@fawcettinnovations.com                         #
-#                                                            #
-##############################################################
-```
+
+#  Copyright (c) 2025, Fawcett Innovations, LLC              
+#  All Rights Reserved                                       
+
+This software is proprietary and confidential.            
+Unauthorized copying, distribution, or use of this        
+code, via any medium, is strictly prohibited.             
+   If you wish to license this software or use it in a       
+For commercial or non-commercial projects, please contact:  
+[contact@fawcettinnovations.com](mailto:contact@fawcettinnovations.com)
+
 ---
 
 ## 🛠 Requirements
