@@ -1,17 +1,20 @@
 # 🐸 FrogNet Installer
-
-This script installs and configures a FrogNet node on a compatible Linux system.
-Copyright (c) 2025, Fawcett Innovations, LLC
-All Rights Reserved
-
-This software is proprietary and confidential.            
-Unauthorized copying, distribution, or use of this        
-code, via any medium, is strictly prohibited.             
-  If you wish to license this software or use it in a       
-  commercial or non-commercial project, please contact:     
-     contact@fawcettinnovations.com                         
-
-
+```
+##############################################################
+#                                                            #
+#  Copyright (c) 2025, Fawcett Innovations, LLC              #
+#  All Rights Reserved                                       #
+#                                                            #
+#  This software is proprietary and confidential.            #
+#  Unauthorized copying, distribution, or use of this        #
+#  code, via any medium, is strictly prohibited.             #
+#                                                            #
+#  If you wish to license this software or use it in a       #
+#  commercial or non-commercial project, please contact:     #
+#     contact@fawcettinnovations.com                         #
+#                                                            #
+##############################################################
+```
 ---
 
 ## 🛠 Requirements
