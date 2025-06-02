@@ -102,5 +102,5 @@ The Ethernet port will serve IP addresses via DHCP. The upstream interface will 
 You can modify the configuration at any time by editing `/etc/frognet/frognet.env`.
 
 ---
-##  Copyright (c) 2025, Fawcett Innovations, LLC              
-#  All Rights Reserved        
+###  Copyright (c) 2025, Fawcett Innovations, LLC              
+###  All Rights Reserved        
