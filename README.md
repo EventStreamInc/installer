@@ -35,7 +35,7 @@ This will:
 6. Apply network changes immediately
 7. Reboot your system after 30 seconds
 
-⚠️ **Warning:** This script writes files directly into your root filesystem (`/`). Do not run on a production system unless you've reviewed the code and tarball contents.
+⚠️⚠️⚠️ **Warning:** This script writes files directly into your root filesystem (`/`). Do not run on a production system unless you've reviewed the code and tarball contents. ⚠️⚠️⚠️
 
 ---
 
