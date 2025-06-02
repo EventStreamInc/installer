@@ -13,7 +13,7 @@ This script installs and configures a FrogNet node on a compatible Linux system.
 - Active **internet connection** during installation (Upstream)
 
 Tested on:
-- ✅ Raspberry Pi 4 (Debian-based OS)
+- ✅ Raspberry Pi 4 (Rasberry Pi mini)
 
 ---
 
