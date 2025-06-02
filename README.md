@@ -23,6 +23,8 @@ If you want the fastest setup and trust this repo, run:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/EventStreamInc/installer/jeremy/bootstrap.sh | sudo bash
+```
+
 
 This will:
 1. Verify your OS and root permissions
