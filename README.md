@@ -33,7 +33,9 @@ This will:
 4. Extract all files directly into `/`
 5. Prompt for configuration values
 6. Apply network changes immediately
-7. Reboot your system after 30 seconds
+6.5 You will need to insert the eth0 cord into the access point at this time.
+8. Reboot your system after 30 seconds
+
 
 ⚠️⚠️⚠️ **Warning:** This script writes files directly into your root filesystem (`/`). Do not run on a production system unless you've reviewed the code and tarball contents. ⚠️⚠️⚠️
 
