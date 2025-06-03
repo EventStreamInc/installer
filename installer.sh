@@ -133,27 +133,32 @@ if (( ${#ETH_IFACES[@]} == 0 )); then
 fi
 
 # 2) Display the list and prompt for choice
-echo_info "Detected Ethernet interfaces:"
-for idx in "${!ETH_IFACES[@]}"; do
-  # show 1-based indices
-  printf "  [%d] %s\n" $((idx+1)) "${ETH_IFACES[$idx]}"
+echo -e "\n\tDetected Ethernet interfaces:\n"
+for iface in "${ETH_IFACES[@]}"; do
+  printf "  • %s\n" "$iface"
 done
+
+DEFAULT_IFACE="${ETH_IFACES[0]}"
 cat <<EOF
 
-You need to tell me which of these interfaces will be used for the access point.
-this is the interface that will be used to connect to the FrogNet network.
-the traffic will route through this interface to the upstream network.
+Enter the name of the interface that will serve as the upstream (WAN) link.
+This is the wired port plugged into your modem/router (e.g. “eth0”).
+Press Enter to accept the default [${DEFAULT_IFACE}].
 
 EOF
 
-read -rp "Enter the index of the interface to use for the access point [default: 1]: " iface_index
-iface_index="${iface_index:-1}"
-if ! [[ "$iface_index" =~ ^[1-9][0-9]*$ ]] || (( iface_index < 1 || iface_index > ${#ETH_IFACES[@]} )); then
-  echo_err "Invalid index: $iface_index. Must be between 1 and ${#ETH_IFACES[@]}."
+read -rp "Interface to use [default: ${DEFAULT_IFACE}]: " iface_input
+iface_input="${iface_input:-$DEFAULT_IFACE}"
+
+# 3) Validate that the typed name is in our ETH_IFACES array
+if ! printf '%s\n' "${ETH_IFACES[@]}" | grep -qx "$iface_input"; then
+  echo_err "Invalid interface: “$iface_input”. Must be one of: ${ETH_IFACES[*]}"
 fi
-ACCESS_POINT_INTERFACE="${ETH_IFACES[$((iface_index-1))]}"
-echo_info "Using $ACCESS_POINT_INTERFACE for the access point interface."
-# ---------------------------------------------------------
+
+UPSTREAM_INTERFACE="$iface_input"
+echo_info "Using $UPSTREAM_INTERFACE as the upstream (WAN) interface."
+
+
 # 7) Prompt for upstream interface
 echo_info "Now we need to set up the upstream interface."
 
