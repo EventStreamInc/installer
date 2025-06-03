@@ -21,6 +21,7 @@ echo -e "\n"
 # 1) Set up install‐dir + log file
 # ---------------------------------------------------------
 INSTALL_DIR="/etc/frognet"
+ENV_FILE="$INSTALL_DIR/frognet.env"
 LOG_FILE="$INSTALL_DIR/installer.log"
 REQUIRED_PKGS=(git apache2 php jq iptables php-cgi network-manager dnsmasq inotify-tools python3 openssh-server net-tools)
 MAP_FILE="/usr/local/bin/mapInterfaces"
@@ -164,13 +165,13 @@ else
   echo_warn "mapInterfaces not found, skipping patch."
 fi
 # --- Port 53 Conflict Resolution ---
-#if lsof -i :53 | grep -q systemd-resolve; then
-#  echo_warn "Port 53 in use by systemd-resolved. Disabling it..."
-#  systemctl stop systemd-resolved
-#  systemctl disable systemd-resolved
-#  rm -f /etc/resolv.conf
-#  echo "nameserver 1.1.1.1" > /etc/resolv.conf
-#fi
+if lsof -i :53 | grep -q systemd-resolve; then
+  echo_warn "Port 53 in use by systemd-resolved. Disabling it..."
+  systemctl stop systemd-resolved
+  systemctl disable systemd-resolved
+  rm -f /etc/resolv.conf
+  echo "nameserver 1.1.1.1" > /etc/resolv.conf
+fi
 
 
 # --- Final Notice and Reboot ---
