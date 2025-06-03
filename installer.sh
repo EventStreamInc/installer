@@ -23,6 +23,22 @@ echo -e "\n"
 INSTALL_DIR="/etc/frognet"
 LOG_FILE="$INSTALL_DIR/installer.log"
 
+# ---------------------------------------------------------
+# 1.5) Helper‐function definitions
+# ---------------------------------------------------------
+echo_info() {
+  printf "[ \033[1;32m✅\033[0m ] %s\n" "$*"
+}
+
+echo_warn() {
+  printf "[ \033[1;33m⚠️\033[0m ] %s\n" "$*"
+}
+
+echo_err() {
+  printf "[ \033[1;31m❌\033[0m ] %s\n" "$*" >&2
+  exit 1
+}
+
 # Ensure /etc/frognet exists so we can write $LOG_FILE
 mkdir -p "$INSTALL_DIR"
 
@@ -35,20 +51,13 @@ exec > >(tee -a "$LOG_FILE") 2>&1
 # 2) Figure out where we are
 # ---------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-echo "[*] Installer script is running from: $SCRIPT_DIR"
+echo_info "Script directory: $SCRIPT_DIR"
 
 CURRENT_DIR="$(pwd)"
-echo "[*] Current working directory: $CURRENT_DIR"
+echo_info "Current working directory: $CURRENT_DIR"
 
 # ---------------------------------------------------------
-# 3) Helper‐function definitions
-# ---------------------------------------------------------
-echo_info() { printf "[\033[1;32m*\033[0m] %s\n" "$*"; }
-echo_warn() { printf "[\033[1;33m!\033[0m] %s\n" "$*"; }
-echo_err()  { printf "[\033[1;31mERROR\033[0m] %s\n" "$*" >&2; exit 1; }
-
-# ---------------------------------------------------------
-# 4) Initial sanity checks
+# 3) Initial sanity checks
 # ---------------------------------------------------------
 echo_info "FrogNet Phase 1 Installer — Logging to $LOG_FILE"
 echo_info "Checking OS and privileges…"
@@ -61,7 +70,7 @@ source /etc/os-release
 ORIGINAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo 'unknown')}"
 
 # ---------------------------------------------------------
-# 5) Locate the tarball
+# 4) Locate the tarball
 # ---------------------------------------------------------
 if [[ -f "$SCRIPT_DIR/installable_tar.tar" ]]; then
   TARBALL="$SCRIPT_DIR/installable_tar.tar"
