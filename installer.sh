@@ -136,6 +136,26 @@ for idx in "${!ETH_IFACES[@]}"; do
   # show 1-based indices
   printf "  [%d] %s\n" $((idx+1)) "${ETH_IFACES[$idx]}"
 done
+cat <<EOF
+
+You need to tell me which of these interfaces will be used for the access point.
+this is the interface that will be used to connect to the FrogNet network.
+the traffic will route through this interface to the upstream network.
+
+EOF
+
+read -rp "Enter the index of the interface to use for the access point [default: 1]: " iface_index
+iface_index="${iface_index:-1}"
+if ! [[ "$iface_index" =~ ^[1-9][0-9]*$ ]] || (( iface_index < 1 || iface_index > ${#ETH_IFACES[@]} )); then
+  echo_err "Invalid index: $iface_index. Must be between 1 and ${#ETH_IFACES[@]}."
+fi
+ACCESS_POINT_INTERFACE="${ETH_IFACES[$((iface_index-1))]}"
+echo_info "Using $ACCESS_POINT_INTERFACE for the access point interface."
+# ---------------------------------------------------------
+# 7) Prompt for upstream interface
+echo_info "Now we need to set up the upstream interface."
+
+
 
 
 # List all non-loopback interfaces so the user can choose
