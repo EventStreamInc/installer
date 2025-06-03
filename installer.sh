@@ -185,7 +185,17 @@ chmod 600 "$ENV_FILE"
 chown root:root "$ENV_FILE"
 
 # ---------------------------------------------------------
-# 9) Patch mapInterfaces if it already exists
+# 9) Run setup_lillypad.bash with the hostname and IP
+# ---------------------------------------------------------
+echo_info "Executing setup_lillypad.bash with $FROGNET_HOSTNAME and $PI_IP_ADDRESS…"
+if [[ -x "/usr/local/bin/setup_lillypad.bash" ]]; then
+  /usr/local/bin/setup_lillypad.bash "$FROGNET_HOSTNAME" "$PI_IP_ADDRESS"
+else
+  echo_warn "setup_lillypad.bash not found or not executable at /usr/local/bin/"
+fi
+
+# ---------------------------------------------------------
+# 10) Patch mapInterfaces if it already exists
 # ---------------------------------------------------------
 if [[ -f "$MAP_FILE" ]]; then
   echo_info "Patching mapInterfaces…"
@@ -197,7 +207,7 @@ else
 fi
 
 # ---------------------------------------------------------
-# 10) Port 53 conflict resolution (commented out by default)
+# 11) Port 53 conflict resolution (commented out by default)
 # ---------------------------------------------------------
 # if lsof -i :53 | grep -q systemd-resolve; then
 #   echo_warn "Port 53 in use by systemd-resolved. Disabling it…"
@@ -208,7 +218,7 @@ fi
 # fi
 
 # ---------------------------------------------------------
-# 11) Final notice & reboot
+# 12) Final notice & reboot
 # ---------------------------------------------------------
 echo_info "Installation complete."
 echo_info "Review the log at: $LOG_FILE"
