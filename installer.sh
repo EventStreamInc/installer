@@ -27,9 +27,9 @@ REQUIRED_PKGS=(git apache2 php jq iptables php-cgi network-manager dnsmasq inoti
 MAP_FILE="/usr/local/bin/mapInterfaces"
 
 #echo constants for debugging
-echo_info "Install directory: $INSTALL_DIR"
-echo_info "Environment file: $ENV_FILE"
-echo_info "Log file: $LOG_FILE"
+echo "Install directory: $INSTALL_DIR"
+echo "Environment file: $ENV_FILE"
+echo "Log file: $LOG_FILE"
 # Ensure the install directory exists
 mkdir -p "$INSTALL_DIR"
 # Ensure the log file is writable
