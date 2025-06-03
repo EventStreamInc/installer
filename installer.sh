@@ -62,9 +62,11 @@ echo_info "Current working directory: $CURRENT_DIR"
 echo_info "FrogNet Phase 1 Installer — Logging to $LOG_FILE"
 echo_info "Checking OS and privileges…"
 
-[[ -f /etc/os-release ]] || echo_err "Not a Debian/Ubuntu system"
 source /etc/os-release
-[[ "$ID" =~ ^(debian|ubuntu|raspbian)$ ]] || echo_err "Unsupported OS: $ID"
+if [[ "$ID" != "debian" && "$ID" != "ubuntu" && "$ID" != "raspbian" ]]; then
+  echo_err "Unsupported OS: $ID"
+fi
+
 (( EUID == 0 )) || echo_err "Must be run as root. Use: sudo $0"
 
 ORIGINAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo 'unknown')}"
