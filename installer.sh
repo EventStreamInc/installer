@@ -115,7 +115,7 @@ sysctl -w net.ipv4.ip_forward=1
 sysctl -p /etc/sysctl.conf
 
 # ---------------------------------------------------------
-echo_warn "Starting interactive configuration…\n\n"
+echo  "****Starting interactive configuration****"
 
 # 1) Discover wired‐Ethernet interfaces
 ETH_IFACES=()
