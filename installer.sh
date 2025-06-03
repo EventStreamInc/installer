@@ -115,36 +115,68 @@ sysctl -w net.ipv4.ip_forward=1
 sysctl -p /etc/sysctl.conf
 
 # ---------------------------------------------------------
-# 8) Interactive configuration
-# ---------------------------------------------------------
 echo_info "Starting interactive configuration…"
-read -rp "Enter FrogNet domain [default: FrogNet-001]: " domain_input
-FROGNET_DOMAIN="${domain_input:-FrogNet-001}"
 
-for i in {1..10}; do
-  candidate_ip="10.$((RANDOM % 254 + 1)).$((RANDOM % 254 + 1)).1"
-  if ! ip route show | grep -q "$(echo "$candidate_ip" | cut -d. -f1-3).0/24"; then
-    DEFAULT_NODE_IP="$candidate_ip"
-    break
-  fi
-done
-FROGNET_NODE_IP="${DEFAULT_NODE_IP:-10.10.10.1}"
-read -rp "Enter FrogNet node IP [default: $FROGNET_NODE_IP]: " ip_input
-FROGNET_NODE_IP="${ip_input:-$FROGNET_NODE_IP}"
+# List all non-loopback interfaces so the user can choose
+echo_info "Detected network interfaces:"
+ip -o link show | awk -F': ' '$2 != "lo" { print "  •", $2 }'
 
-DEFAULT_IFACE="$(ip route | awk '/^default/ {print $5; exit}')"
-read -rp "Enter upstream interface [default: $DEFAULT_IFACE]: " iface_input
-FROGNET_INTERFACE="${iface_input:-$DEFAULT_IFACE}"
+cat <<EOF
+
+You need to tell me which interface on the Pi has a working Internet connection (i.e. “upstream”).
+The Pi will route outgoing FrogNet traffic through that interface.
+For example, if you plug a cable from your modem/router into eth0, choose “eth0” here.
+If you have eth0 and eth1 available, pick whichever is actually plugged into your upstream network.
+
+EOF
+
+# Automatically detect the interface that currently has the default route
+DETECTED_UPSTREAM="$(ip route 2>/dev/null | awk '/^default/ { print $5; exit }')"
+DETECTED_UPSTREAM="${DETECTED_UPSTREAM:-eth0}"
+
+read -rp "Enter the Pi’s upstream interface [default: $DETECTED_UPSTREAM]: " upstream_input
+UPSTREAM_INTERFACE="${upstream_input:-$DETECTED_UPSTREAM}"
+
+if ! ip link show "$UPSTREAM_INTERFACE" &>/dev/null; then
+  echo_err "Interface “$UPSTREAM_INTERFACE” does not exist. Please double-check and rerun."
+fi
+
+echo_info "Using $UPSTREAM_INTERFACE for upstream (WAN) traffic."
+
+# Prompt for hostname that FrogNet clients will see
+echo_info "Now choose a hostname for your FrogNet network (this becomes the domain name)."
+read -rp "Enter the hostname [default: FrogNet-001]: " hostname_input
+FROGNET_HOSTNAME="${hostname_input:-FrogNet-001}"
+
+# Prompt for static IP address of the Pi (must be 10.x.x.1)
+cat <<EOF
+
+Next, choose the Pi’s static IP address on the 10.x.x.1 subnet.
+This address is what clients will use to reach the Pi.
+If you want the default, use 10.2.2.1.
+Ensure that whatever you pick follows the format 10.<any>.<any>.1 (e.g., 10.5.10.1).
+
+EOF
+
+read -rp "Enter the Pi’s IP address [default: 10.2.2.1]: " ip_input
+PI_IP_ADDRESS="${ip_input:-10.2.2.1}"
+
+# Validate that it matches 10.x.x.1 pattern
+if [[ ! "$PI_IP_ADDRESS" =~ ^10\.[0-9]{1,3}\.[0-9]{1,3}\.1$ ]]; then
+  echo_err "Invalid IP “$PI_IP_ADDRESS”. Must be in the form 10.x.x.1."
+fi
+
+echo_info "Using $PI_IP_ADDRESS as the Pi’s static address."
 
 # ---------------------------------------------------------
-# 9) Save configuration
+# 8) Save configuration
 # ---------------------------------------------------------
 echo_info "Saving configuration to $ENV_FILE…"
 cat > "$ENV_FILE" <<EOF
 # FrogNet Config
-FROGNET_DOMAIN="$FROGNET_DOMAIN"
-FROGNET_NODE_IP="$FROGNET_NODE_IP"
-FROGNET_INTERFACE="$FROGNET_INTERFACE"
+FROGNET_HOSTNAME="$FROGNET_HOSTNAME"
+PI_IP_ADDRESS="$PI_IP_ADDRESS"
+UPSTREAM_INTERFACE="$UPSTREAM_INTERFACE"
 INSTALL_DATE="$(date -Iseconds)"
 INSTALLER_VERSION="1.134"
 ORIGINAL_USER="$ORIGINAL_USER"
@@ -153,7 +185,7 @@ chmod 600 "$ENV_FILE"
 chown root:root "$ENV_FILE"
 
 # ---------------------------------------------------------
-# 10) Patch mapInterfaces if it already exists
+# 9) Patch mapInterfaces if it already exists
 # ---------------------------------------------------------
 if [[ -f "$MAP_FILE" ]]; then
   echo_info "Patching mapInterfaces…"
@@ -165,18 +197,18 @@ else
 fi
 
 # ---------------------------------------------------------
-# 11) Port 53 conflict resolution
+# 10) Port 53 conflict resolution (commented out by default)
 # ---------------------------------------------------------
-if lsof -i :53 | grep -q systemd-resolve; then
-  echo_warn "Port 53 in use by systemd-resolved. Disabling it…"
-  systemctl stop systemd-resolved
-  systemctl disable systemd-resolved
-  rm -f /etc/resolv.conf
-  echo "nameserver 1.1.1.1" > /etc/resolv.conf
-fi
+# if lsof -i :53 | grep -q systemd-resolve; then
+#   echo_warn "Port 53 in use by systemd-resolved. Disabling it…"
+#   systemctl stop systemd-resolved
+#   systemctl disable systemd-resolved
+#   rm -f /etc/resolv.conf
+#   echo "nameserver 1.1.1.1" > /etc/resolv.conf
+# fi
 
 # ---------------------------------------------------------
-# 12) Final notice & reboot
+# 11) Final notice & reboot
 # ---------------------------------------------------------
 echo_info "Installation complete."
 echo_info "Review the log at: $LOG_FILE"
