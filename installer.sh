@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+echo -e "\n"
+cat <<'EOF'
 ##############################################################
 #                                                            #
 #  Copyright (c) 2025, Fawcett Innovations, LLC              #
@@ -13,42 +15,43 @@
 #     contact@fawcettinnovations.com                         #
 #                                                            #
 ##############################################################
+EOF
+echo -e "\n"
+# ---------------------------------------------------------
+# 1) Set up install‐dir + log file
+# ---------------------------------------------------------
+INSTALL_DIR="/etc/frognet"
+LOG_FILE="$INSTALL_DIR/installer.log"
 
-# installFrog.sh — FrogNet Phase 1 Installer (All-In-One)
-# This script will:
-#   1. Verify Debian/Ubuntu and root access
-#   2. Update + install required packages
-#   3. Prompt user for FrogNet configuration
-#   4. Save config to /etc/frognet/frognet.env
-#   5. Extract tarball to root
-#   6. Patch configs (e.g., IP forwarding, mapInterfaces)
-#   7. Finalize install and reboot
+# Ensure /etc/frognet exists so we can write $LOG_FILE
+mkdir -p "$INSTALL_DIR"
 
-set -euo pipefail
-
-# --- Constants ---
-LOG_FILE="/var/log/frognet-install.log"
+# Redirect all stdout/stderr through tee, appending to $LOG_FILE
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-INSTALL_DIR="/etc/frognet"
+# Now every single echo/cat/error from here on goes to both console & $LOG_FILE
+
+# ---------------------------------------------------------
+# 2) Figure out where we are
+# ---------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-TARBALL="$SCRIPT_DIR/installable_tar.tar"
-ENV_FILE="$INSTALL_DIR/frognet.env"
-MAP_FILE="/usr/local/bin/mapInterfaces"
+echo "[*] Installer script is running from: $SCRIPT_DIR"
 
-REQUIRED_PKGS=(
-  apache2 php php-cgi jq iptables network-manager dnsmasq
-  inotify-tools python3 openssh-server net-tools hostapd bridge-utils
-)
+CURRENT_DIR="$(pwd)"
+echo "[*] Current working directory: $CURRENT_DIR"
 
-# --- Helper Functions ---
+# ---------------------------------------------------------
+# 3) Helper‐function definitions
+# ---------------------------------------------------------
 echo_info() { printf "[\033[1;32m*\033[0m] %s\n" "$*"; }
 echo_warn() { printf "[\033[1;33m!\033[0m] %s\n" "$*"; }
-echo_err() { printf "[\033[1;31mERROR\033[0m] %s\n" "$*" >&2; exit 1; }
+echo_err()  { printf "[\033[1;31mERROR\033[0m] %s\n" "$*" >&2; exit 1; }
 
-# --- Begin ---
+# ---------------------------------------------------------
+# 4) Initial sanity checks
+# ---------------------------------------------------------
 echo_info "FrogNet Phase 1 Installer — Logging to $LOG_FILE"
-echo_info "Checking OS and privileges..."
+echo_info "Checking OS and privileges…"
 
 [[ -f /etc/os-release ]] || echo_err "Not a Debian/Ubuntu system"
 source /etc/os-release
@@ -56,6 +59,21 @@ source /etc/os-release
 (( EUID == 0 )) || echo_err "Must be run as root. Use: sudo $0"
 
 ORIGINAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo 'unknown')}"
+
+# ---------------------------------------------------------
+# 5) Locate the tarball
+# ---------------------------------------------------------
+if [[ -f "$SCRIPT_DIR/installable_tar.tar" ]]; then
+  TARBALL="$SCRIPT_DIR/installable_tar.tar"
+  echo_info "Found tarball alongside the script: $TARBALL"
+
+elif [[ -f "$INSTALL_DIR/installable_tar.tar" ]]; then
+  TARBALL="$INSTALL_DIR/installable_tar.tar"
+  echo_info "Found tarball in $INSTALL_DIR: $TARBALL"
+
+else
+  echo_err "installable_tar.tar not found in $SCRIPT_DIR or $INSTALL_DIR. Aborting."
+fi
 
 # --- Update and Install Packages ---
 echo_info "Updating packages..."
