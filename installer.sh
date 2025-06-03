@@ -26,6 +26,23 @@ LOG_FILE="$INSTALL_DIR/installer.log"
 REQUIRED_PKGS=(git apache2 php jq iptables php-cgi network-manager dnsmasq inotify-tools python3 openssh-server net-tools)
 MAP_FILE="/usr/local/bin/mapInterfaces"
 
+#echo constants for debugging
+echo_info "Install directory: $INSTALL_DIR"
+echo_info "Environment file: $ENV_FILE"
+echo_info "Log file: $LOG_FILE"
+# Ensure the install directory exists
+mkdir -p "$INSTALL_DIR"
+# Ensure the log file is writable
+touch "$LOG_FILE" || echo_err "Cannot write to log file: $LOG_FILE"
+# Ensure the environment file is writable
+touch "$ENV_FILE" || echo_err "Cannot write to environment file: $ENV_FILE"
+# Ensure the mapInterfaces file is writable
+touch "$MAP_FILE" || echo_err "Cannot write to mapInterfaces file: $MAP_FILE"
+# Ensure the log file is empty
+> "$LOG_FILE" || echo_err "Cannot clear log file: $LOG_FILE"
+# Ensure the environment file is empty
+> "$ENV_FILE" || echo_err "Cannot clear environment file: $ENV_FILE"
+
 
 # ---------------------------------------------------------
 # 1.5) Helper‐function definitions
@@ -90,6 +107,9 @@ elif [[ -f "$INSTALL_DIR/installable_tar.tar" ]]; then
 else
   echo_err "installable_tar.tar not found in $SCRIPT_DIR or $INSTALL_DIR. Aborting."
 fi
+
+# ---------------------------------------------------------
+# Move tarball to /etc/frognet
 
 # --- Update and Install Packages ---
 echo_info "Updating packages..."
