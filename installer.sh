@@ -109,15 +109,6 @@ fi
 echo_info "Extracting tarball to root..."
 tar -xvf "$TARBALL" -C /
 
-# --- Patch mapInterfaces if needed ---
-if [[ -f "$MAP_FILE" ]]; then
-  echo_info "Patching mapInterfaces..."
-  sed -i 's/^export wlan0Name=.*/export wlan0Name="wlan0"/' "$MAP_FILE"
-  sed -i 's/^export wlan1Name=.*/export wlan1Name=""/' "$MAP_FILE"
-  grep -E 'wlan0Name|wlan1Name' "$MAP_FILE"
-else
-  echo_warn "mapInterfaces not found, skipping patch."
-fi
 
 # --- Enable IPv4 forwarding ---
 echo_info "Enabling IPv4 forwarding..."
@@ -158,6 +149,17 @@ ORIGINAL_USER="$ORIGINAL_USER"
 EOF
 chmod 600 "$ENV_FILE"
 chown root:root "$ENV_FILE"
+
+# --- Patch mapInterfaces if needed ---
+if [[ -f "$MAP_FILE" ]]; then
+  echo_info "Patching mapInterfaces..."
+  sed -i 's/^export wlan0Name=.*/export wlan0Name="wlan0"/' "$MAP_FILE"
+  sed -i 's/^export wlan1Name=.*/export wlan1Name=""/' "$MAP_FILE"
+  grep -E 'wlan0Name|wlan1Name' "$MAP_FILE"
+else
+  echo_warn "mapInterfaces not found, skipping patch."
+fi
+
 
 # --- Final Notice and Reboot ---
 echo_info "Installation complete."
