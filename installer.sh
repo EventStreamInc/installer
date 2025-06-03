@@ -22,10 +22,15 @@ echo -e "\n"
 # ---------------------------------------------------------
 INSTALL_DIR="/etc/frognet"
 LOG_FILE="$INSTALL_DIR/installer.log"
+REQUIRED_PKGS=(git apache2 php jq iptables php-cgi network-manager dnsmasq inotify-tools python3 openssh-server net-tools)
+# MAP_FILE="$INSTALL_DIR/mapInterfaces"
+
 
 # ---------------------------------------------------------
-# 1.5) Helper‐function definitions
+# 1.5) Helper‐function definitions & constants
 # ---------------------------------------------------------
+ENV_FILE="$INSTALL_DIR/frognet.env"
+
 echo_info() {
   printf "[ \033[1;32m✅\033[0m ] %s\n" "$*"
 }
