@@ -117,6 +117,27 @@ sysctl -p /etc/sysctl.conf
 # ---------------------------------------------------------
 echo_info "Starting interactive configuration…"
 
+# 1) Discover wired‐Ethernet interfaces
+ETH_IFACES=()
+for iface_path in /sys/class/net/*; do
+  name=$(basename "$iface_path")
+  [[ "$name" == "lo" ]] && continue
+  [[ -d "/sys/class/net/$name/wireless" ]] && continue
+  ETH_IFACES+=("$name")
+done
+
+if (( ${#ETH_IFACES[@]} == 0 )); then
+  echo_err "No Ethernet interfaces detected. Aborting."
+fi
+
+# 2) Display the list and prompt for choice
+echo_info "Detected Ethernet interfaces:"
+for idx in "${!ETH_IFACES[@]}"; do
+  # show 1-based indices
+  printf "  [%d] %s\n" $((idx+1)) "${ETH_IFACES[$idx]}"
+done
+
+
 # List all non-loopback interfaces so the user can choose
 echo_info "Detected network interfaces:"
 ip -o link show | awk -F': ' '$2 != "lo" { print "  •", $2 }'
