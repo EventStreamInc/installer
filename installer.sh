@@ -66,6 +66,11 @@ echo_info "Checking OS and privileges…"
 (( EUID == 0 )) || echo_err "Must be run as root. Use: sudo $0"
 ORIGINAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo 'unknown')}"
 
+# Get an email address for the user
+# network name for the FrogNet network
+# Phone it home
+
+
 # ---------------------------------------------------------
 # 4) Locate the tarball
 # ---------------------------------------------------------
@@ -105,7 +110,8 @@ fi
 [[ -f "$TARBALL" ]] || echo_err "Tarball not found: $TARBALL"
 echo_info "Extracting tarball to /…"
 tar -xvf "$TARBALL" -C /
-
+# copy the tarball to the install directory
+cp "$TARBALL" "$INSTALL_DIR/"
 # ---------------------------------------------------------
 # 7) Enable IPv4 forwarding
 # ---------------------------------------------------------
@@ -171,10 +177,7 @@ ip -o link show | awk -F': ' '$2 != "lo" { print "  •", $2 }'
 
 cat <<EOF
 
-You need to tell me which interface on the Pi has a working Internet connection (i.e. “upstream”).
-The Pi will route outgoing FrogNet traffic through that interface.
-For example, if you plug a cable from your modem/router into eth0, choose “eth0” here.
-If you have eth0 and eth1 available, pick whichever is actually plugged into your upstream network.
+ETHERNET INTERFACE SELECTION
 
 EOF
 
@@ -200,7 +203,7 @@ FROGNET_HOSTNAME="${hostname_input:-FrogNet-001}"
 cat <<EOF
 
 Next, choose the Pi’s static IP address on the 10.x.x.1 subnet.
-This address is what clients will use to reach the Pi.
+This address is what clients will use to reach the Frognet.
 If you want the default, use 10.2.2.1.
 Ensure that whatever you pick follows the format 10.<any>.<any>.1 (e.g., 10.5.10.1).
 
@@ -216,7 +219,31 @@ fi
 
 echo_info "Using $PI_IP_ADDRESS as the Pi’s static address."
 
-# ---------------------------------------------------------
+# Generate a unique install ID based on the current date and time
+INSTALL_ID="$(tr -dc 'a-f0-9' < /dev/urandom | head -c32 | sed 's/^\(........\)\(....\)\(....\)\(....\)\(............\)$/\1-\2-\3-\4-\5/')"
+
+# Prompt for email
+read -rp "Enter your email (for license registration): " USER_EMAIL
+if [[ -z "$USER_EMAIL" ]]; then
+  echo_warn "No email provided. Using placeholder for license registration."
+  USER_EMAIL="default@test.org"
+fi
+
+# Set endpoint and construct URL with query params
+ENDPOINT="https://oureventstream.com/registerFrogNet.php"
+FULL_URL="${ENDPOINT}?CustomerEmail=${USER_EMAIL}&NetworkID=${INSTALL_ID}&NetworkName=${FROGNET_HOSTNAME}"
+
+echo_info "Registering license with FrogNet at $FULL_URL…"
+
+# Perform the GET request
+RESPONSE=$(curl -s "$FULL_URL")
+if [[ $? -ne 0 ]]; then
+  echo_err "Failed to register license with FrogNet. Please check your network connection."
+fi
+
+echo_info "License registration response: $RESPONSE"
+
+
 # 8) Save configuration
 # ---------------------------------------------------------
 echo_info "Saving configuration to $ENV_FILE…"
@@ -233,25 +260,26 @@ chmod 600 "$ENV_FILE"
 chown root:root "$ENV_FILE"
 
 # ---------------------------------------------------------
-# 9) Run setup_lillypad.bash with the hostname and IP
+# 9) Patch mapInterfaces if it already exists
+# ---------------------------------------------------------
+if [[ -f "$MAP_FILE" ]]; then
+  echo_info "Patching mapInterfaces…"
+  sed -i 's/^export eth0Name=.*/export eth0Name="'"$UPSTREAM_INTERFACE"'"/' "$MAP_FILE"
+  sed -i 's/^export wlan0Name=.*/export wlan0Name="wlan0"/' "$MAP_FILE"
+  sed -i 's/^export wlan1Name=.*/export wlan1Name=""/' "$MAP_FILE"
+  grep -E 'wlan0Name|wlan1Name' "$MAP_FILE"
+else
+  echo_warn "mapInterfaces not found—skipping patch."
+fi
+
+# ---------------------------------------------------------
+# 10) Run setup_lillypad.bash with the hostname and IP
 # ---------------------------------------------------------
 echo_info "Executing setup_lillypad.bash with $FROGNET_HOSTNAME and $PI_IP_ADDRESS…"
 if [[ -x "/usr/local/bin/setup_lillypad.bash" ]]; then
   /usr/local/bin/setup_lillypad.bash "$FROGNET_HOSTNAME" "$PI_IP_ADDRESS"
 else
   echo_warn "setup_lillypad.bash not found or not executable at /usr/local/bin/"
-fi
-
-# ---------------------------------------------------------
-# 10) Patch mapInterfaces if it already exists
-# ---------------------------------------------------------
-if [[ -f "$MAP_FILE" ]]; then
-  echo_info "Patching mapInterfaces…"
-  sed -i 's/^export wlan0Name=.*/export wlan0Name="wlan0"/' "$MAP_FILE"
-  sed -i 's/^export wlan1Name=.*/export wlan1Name=""/' "$MAP_FILE"
-  grep -E 'wlan0Name|wlan1Name' "$MAP_FILE"
-else
-  echo_warn "mapInterfaces not found—skipping patch."
 fi
 
 # ---------------------------------------------------------
@@ -270,7 +298,8 @@ fi
 # ---------------------------------------------------------
 echo_info "Installation complete."
 echo_info "Review the log at: $LOG_FILE"
-echo_info "Ensure Ethernet is connected. Rebooting in 30 seconds…"
+echo_info "Ensure Ethernet is connected!!"
+echo_info "Rebooting in 30 seconds…"
 for i in {30..1}; do
   printf "\rRebooting in %2d seconds… Press Ctrl+C to cancel." "$i"
   sleep 1
