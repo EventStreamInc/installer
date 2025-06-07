@@ -204,6 +204,9 @@ fi
 # ---------------------------------------------------------
 # 10) Run setup_lillypad.bash with the hostname and IP
 # ---------------------------------------------------------
+if [[ -z "$FROGNET_HOSTNAME" || -z "$PI_IP_ADDRESS" ]]; then
+  echo_err "FROGNET_HOSTNAME or PI_IP_ADDRESS not set. Cannot run setup_lillypad.bash."
+fi
 echo_info "Executing setup_lillypad.bash with $FROGNET_HOSTNAME and $PI_IP_ADDRESS…"
 if [[ -x "/usr/local/bin/setup_lillypad.bash" ]]; then
   /usr/local/bin/setup_lillypad.bash "$FROGNET_HOSTNAME" "$PI_IP_ADDRESS"
