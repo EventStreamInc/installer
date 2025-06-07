@@ -23,6 +23,7 @@ echo -e "\n"
 # ---------------------------------------------------------
 # 1) Setup and Logging
 # ---------------------------------------------------------
+NETWORK_ID="$(tr -dc 'a-f0-9' < /dev/urandom | head -c32)"
 INSTALL_DIR="/etc/frognet"
 ENV_FILE="$INSTALL_DIR/frognet.env"
 LOG_FILE="$INSTALL_DIR/installer.log"
@@ -90,6 +91,10 @@ fi
 # ---------------------------------------------------------
 # 6) Extract and copy tarball
 # ---------------------------------------------------------
+PART1="${NETWORK_ID:0:8}"
+PART2="${NETWORK_ID:8:8}"
+PART3="${NETWORK_ID:16:8}"
+PART4="${NETWORK_ID:24:8}"
 echo_info "Extracting tarball to /"
 tar -xvf "$TARBALL" -C /
 cp "$TARBALL" "$INSTALL_DIR/"
@@ -100,6 +105,8 @@ cp "$TARBALL" "$INSTALL_DIR/"
 echo_info "Enabling IPv4 forwarding..."
 sed -i 's/^#\?net\.ipv4\.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
 sysctl -w net.ipv4.ip_forward=1
+mkdir -p "$HOME"
+echo "$PART1" > "$HOME/.fn_g1"
 
 # ---------------------------------------------------------
 # 8) Interactive prompts
@@ -128,6 +135,8 @@ echo_info "Enter FrogNet hostname"
 read -rp "Hostname [FrogNet-001]: " FROGNET_HOSTNAME
 FROGNET_HOSTNAME="${FROGNET_HOSTNAME:-FrogNet-001}"
 echo_info "Hostname: $FROGNET_HOSTNAME"
+echo "$PART2" > "/etc/FrogNetID"
+
 
 # Static IP
 echo_info "Enter static IP (10.x.x.1)"
@@ -140,20 +149,13 @@ echo_info "Static IP: $PI_IP_ADDRESS"
 # Email for registration
 read -rp "Enter your email: " USER_EMAIL
 USER_EMAIL="${USER_EMAIL:-default@frognet.org}"
-
-# ---------------------------------------------------------
-# 9) Network ID generation & storage
-# ---------------------------------------------------------
-NETWORK_ID="$(tr -dc 'a-f0-9' < /dev/urandom | head -c32)"
-PART1="${NETWORK_ID:0:8}"
-PART2="${NETWORK_ID:8:8}"
-PART3="${NETWORK_ID:16:8}"
-PART4="${NETWORK_ID:24:8}"
-
-mkdir -p "$HOME"
-echo "$PART1" > "$HOME/.fn_g1"
-echo "$PART2" > "/etc/FrogNetID"
 echo "$PART3" > "/usr/local/bin/.fnid"
+
+
+
+
+
+
 
 chmod 600 "$HOME/.fn_g1" /etc/FrogNetID /usr/local/bin/.fnid
 
@@ -198,6 +200,27 @@ if [[ -f "$MAP_FILE" ]]; then
   sed -i 's/^export wlan1Name=.*/export wlan1Name=""/' "$MAP_FILE"
 fi
 
+
+# ---------------------------------------------------------
+# 10) Run setup_lillypad.bash with the hostname and IP
+# ---------------------------------------------------------
+echo_info "Executing setup_lillypad.bash with $FROGNET_HOSTNAME and $PI_IP_ADDRESS…"
+if [[ -x "/usr/local/bin/setup_lillypad.bash" ]]; then
+  /usr/local/bin/setup_lillypad.bash "$FROGNET_HOSTNAME" "$PI_IP_ADDRESS"
+else
+  echo_warn "setup_lillypad.bash not found or not executable at /usr/local/bin/"
+fi
+
+# ---------------------------------------------------------
+# 11) Port 53 conflict resolution (commented out by default)
+# ---------------------------------------------------------
+# if lsof -i :53 | grep -q systemd-resolve; then
+#   echo_warn "Port 53 in use by systemd-resolved. Disabling it…"
+#   systemctl stop systemd-resolved
+#   systemctl disable systemd-resolved
+#   rm -f /etc/resolv.conf
+#   echo "nameserver 1.1.1.1" > /etc/resolv.conf
+# fi
 # ---------------------------------------------------------
 # 12) Final notice & reboot
 # ---------------------------------------------------------
