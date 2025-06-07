@@ -144,7 +144,6 @@ USER_EMAIL="${USER_EMAIL:-default@frognet.org}"
 # ---------------------------------------------------------
 # 9) Network ID generation & storage
 # ---------------------------------------------------------
-echo_info "Generating Network ID fragments..."
 NETWORK_ID="$(tr -dc 'a-f0-9' < /dev/urandom | head -c32)"
 PART1="${NETWORK_ID:0:8}"
 PART2="${NETWORK_ID:8:8}"
@@ -161,7 +160,7 @@ chmod 600 "$HOME/.fn_g1" /etc/FrogNetID /usr/local/bin/.fnid
 # Reassemble for phone-home
 FULL_NETWORK_ID="$PART1$PART2$PART3$PART4"
 
-echo_info "Full Network ID: $FULL_NETWORK_ID"
+#echo_info "Full Network ID: $FULL_NETWORK_ID"
 
 # ---------------------------------------------------------
 # 10) Phone home via GET
