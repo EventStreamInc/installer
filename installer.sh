@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+
 echo -e "\n"
 cat <<'EOF'
 ##############################################################
@@ -16,10 +17,11 @@ cat <<'EOF'
 #                                                            #
 ##############################################################
 EOF
+
 echo -e "\n"
 
 # ---------------------------------------------------------
-# 1) Set up install‐dir + log file
+# 1) Setup and Logging
 # ---------------------------------------------------------
 INSTALL_DIR="/etc/frognet"
 ENV_FILE="$INSTALL_DIR/frognet.env"
@@ -28,30 +30,20 @@ REQUIRED_PKGS=(git apache2 php jq iptables php-cgi network-manager dnsmasq inoti
 MAP_FILE="/usr/local/bin/mapInterfaces"
 
 mkdir -p "$INSTALL_DIR"
-> "$LOG_FILE"   # create/clear the log
-> "$ENV_FILE"   # create/clear the environment file
-chmod 600 "$ENV_FILE" || echo_err "Cannot chmod $ENV_FILE"
-# (Don’t touch MAP_FILE here—I only want to patch if it already exists later.)
+> "$LOG_FILE"   # clear log
+> "$ENV_FILE"   # clear env file
+chmod 600 "$ENV_FILE"
 
-# ---------------------------------------------------------
-# 1.5) Helper‐function definitions
-# ---------------------------------------------------------
-echo_info() {
-  printf "[ \033[1;32m✅\033[0m ] %s\n" "$*"
-}
-echo_warn() {
-  printf "[ \033[1;33m⚠️\033[0m ] %s\n" "$*"
-}
-echo_err() {
-  printf "[ \033[1;31m❌\033[0m ] %s\n" "$*" >&2
-  exit 1
-}
+# Helper functions
+echo_info() { printf "[ \033[1;32m✅\033[0m ] %s\n" "$*"; }
+echo_warn() { printf "[ \033[1;33m⚠️\033[0m ] %s\n" "$*"; }
+echo_err() { printf "[ \033[1;31m❌\033[0m ] %s\n" "$*" >&2; exit 1; }
 
-# Redirect stdout/stderr to both console and $LOG_FILE
+# Redirect all output to console and log
 exec > >(tee -a "$LOG_FILE") 2>&1
 
 # ---------------------------------------------------------
-# 2) Figure out where we are
+# 2) Detect script and work dirs
 # ---------------------------------------------------------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 echo_info "Script directory: $SCRIPT_DIR"
@@ -59,194 +51,131 @@ CURRENT_DIR="$(pwd)"
 echo_info "Current working directory: $CURRENT_DIR"
 
 # ---------------------------------------------------------
-# 3) Initial sanity checks
+# 3) Sanity checks
 # ---------------------------------------------------------
 echo_info "FrogNet Phase 1 Installer — Logging to $LOG_FILE"
-echo_info "Checking OS and privileges…"
 (( EUID == 0 )) || echo_err "Must be run as root. Use: sudo $0"
 ORIGINAL_USER="${SUDO_USER:-$(logname 2>/dev/null || echo 'unknown')}"
 
-# Get an email address for the user
-# network name for the FrogNet network
-# Phone it home
-
-
 # ---------------------------------------------------------
-# 4) Locate the tarball
+# 4) Find tarball
 # ---------------------------------------------------------
 if [[ -f "$SCRIPT_DIR/installable_tar.tar" ]]; then
   TARBALL="$SCRIPT_DIR/installable_tar.tar"
-  echo_info "Found tarball alongside the script: $TARBALL"
 elif [[ -f "$INSTALL_DIR/installable_tar.tar" ]]; then
   TARBALL="$INSTALL_DIR/installable_tar.tar"
-  echo_info "Found tarball in $INSTALL_DIR: $TARBALL"
 else
-  echo_err "installable_tar.tar not found in $SCRIPT_DIR or $INSTALL_DIR. Aborting."
+  echo_err "installable_tar.tar not found in $SCRIPT_DIR or $INSTALL_DIR"
 fi
+echo_info "Using tarball: $TARBALL"
 
 # ---------------------------------------------------------
-# 5) Install missing packages
+# 5) Install dependencies
 # ---------------------------------------------------------
-echo_info "Updating packages…"
+echo_info "Updating packages..."
 export DEBIAN_FRONTEND=noninteractive
-apt-get update -qq
-apt-get upgrade -y -qq
+apt-get update -qq && apt-get upgrade -y -qq
 
 missing=()
 for pkg in "${REQUIRED_PKGS[@]}"; do
   dpkg -s "$pkg" &>/dev/null || missing+=("$pkg")
 done
-
 if (( ${#missing[@]} )); then
-  echo_info "Installing missing packages: ${missing[*]}"
+  echo_info "Installing: ${missing[*]}"
   apt-get install -y -qq "${missing[@]}"
 else
-  echo_info "All required packages are installed."
+  echo_info "All required packages installed"
 fi
 
 # ---------------------------------------------------------
-# 6) Extract the tarball
+# 6) Extract and copy tarball
 # ---------------------------------------------------------
-[[ -f "$TARBALL" ]] || echo_err "Tarball not found: $TARBALL"
-echo_info "Extracting tarball to /…"
+echo_info "Extracting tarball to /"
 tar -xvf "$TARBALL" -C /
-# copy the tarball to the install directory
 cp "$TARBALL" "$INSTALL_DIR/"
+
 # ---------------------------------------------------------
 # 7) Enable IPv4 forwarding
 # ---------------------------------------------------------
-echo_info "Enabling IPv4 forwarding…"
+echo_info "Enabling IPv4 forwarding..."
 sed -i 's/^#\?net\.ipv4\.ip_forward=1/net.ipv4.ip_forward=1/' /etc/sysctl.conf
 sysctl -w net.ipv4.ip_forward=1
-sysctl -p /etc/sysctl.conf
 
 # ---------------------------------------------------------
-echo -e "\n\n"
-echo  "****Starting interactive configuration****"
-echo -e "\n\n"
+# 8) Interactive prompts
+# ---------------------------------------------------------
+echo -e "\n****Starting interactive configuration****\n"
 
-# 1) Discover wired‐Ethernet interfaces
+# Choose upstream interface
+echo_info "Detecting Ethernet interfaces..."
 ETH_IFACES=()
-for iface_path in /sys/class/net/*; do
-  name=$(basename "$iface_path")
-  [[ "$name" == "lo" ]] && continue
+for iface in /sys/class/net/*; do
+  name=$(basename "$iface")
+  [[ "$name" == lo ]] && continue
   [[ -d "/sys/class/net/$name/wireless" ]] && continue
   ETH_IFACES+=("$name")
 done
-
-if (( ${#ETH_IFACES[@]} == 0 )); then
-  echo_err "No Ethernet interfaces detected. Aborting."
-fi
-
-# 2) Display the list and prompt for choice
-echo -e "\n\tDetected Ethernet interfaces:\n"
-for iface in "${ETH_IFACES[@]}"; do
-  printf "  • %s\n" "$iface"
-done
-
+(( ${#ETH_IFACES[@]} )) || echo_err "No Ethernet interfaces found"
+echo "Detected: ${ETH_IFACES[*]}"
 DEFAULT_IFACE="${ETH_IFACES[0]}"
-cat <<EOF
+read -rp "Upstream interface [${DEFAULT_IFACE}]: " UPSTREAM_INTERFACE
+UPSTREAM_INTERFACE="${UPSTREAM_INTERFACE:-$DEFAULT_IFACE}"
+[[ " ${ETH_IFACES[*]} " =~ " $UPSTREAM_INTERFACE " ]] || echo_err "Invalid interface"
+echo_info "Using upstream: $UPSTREAM_INTERFACE"
 
-Enter the name of the interface that will serve as the upstream (WAN) link.
-This is the wired port plugged into your modem/router (e.g. “eth0”).
-Press Enter to accept the default [${DEFAULT_IFACE}].
+# Hostname/domain
+echo_info "Enter FrogNet hostname"
+read -rp "Hostname [FrogNet-001]: " FROGNET_HOSTNAME
+FROGNET_HOSTNAME="${FROGNET_HOSTNAME:-FrogNet-001}"
+echo_info "Hostname: $FROGNET_HOSTNAME"
 
-EOF
+# Static IP
+echo_info "Enter static IP (10.x.x.1)"
+read -rp "IP [10.2.2.1]: " PI_IP_ADDRESS
+PI_IP_ADDRESS="${PI_IP_ADDRESS:-10.2.2.1}"
+[[ "$PI_IP_ADDRESS" =~ ^10\.[0-9]{1,3}\.[0-9]{1,3}\.1$ ]] || echo_err "Invalid IP"
 
-read -rp "Interface to use [default: ${DEFAULT_IFACE}]: " iface_input
-iface_input="${iface_input:-$DEFAULT_IFACE}"
+echo_info "Static IP: $PI_IP_ADDRESS"
 
-# 3) Validate that the typed name is in our ETH_IFACES array
-if ! printf '%s\n' "${ETH_IFACES[@]}" | grep -qx "$iface_input"; then
-  echo_err "Invalid interface: “$iface_input”. Must be one of: ${ETH_IFACES[*]}"
-fi
+# Email for registration
+read -rp "Enter your email: " USER_EMAIL
+USER_EMAIL="${USER_EMAIL:-default@frognet.org}"
 
-UPSTREAM_INTERFACE="$iface_input"
-echo_info "Using $UPSTREAM_INTERFACE as the upstream (WAN) interface."
-
-
-# 7) Prompt for upstream interface
-echo_info "Now we need to set up the upstream interface."
-
-
-
-
-# List all non-loopback interfaces so the user can choose
-echo_info "Detected network interfaces:"
-ip -o link show | awk -F': ' '$2 != "lo" { print "  •", $2 }'
-
-cat <<EOF
-
-ETHERNET INTERFACE SELECTION
-
-EOF
-
-# Automatically detect the interface that currently has the default route
-DETECTED_UPSTREAM="$(ip route 2>/dev/null | awk '/^default/ { print $5; exit }')"
-DETECTED_UPSTREAM="${DETECTED_UPSTREAM:-eth0}"
-
-read -rp "Enter the Pi’s upstream interface [default: $DETECTED_UPSTREAM]: " upstream_input
-UPSTREAM_INTERFACE="${upstream_input:-$DETECTED_UPSTREAM}"
-
-if ! ip link show "$UPSTREAM_INTERFACE" &>/dev/null; then
-  echo_err "Interface “$UPSTREAM_INTERFACE” does not exist. Please double-check and rerun."
-fi
-
-echo_info "Using $UPSTREAM_INTERFACE for upstream (WAN) traffic."
-
-# Prompt for hostname that FrogNet clients will see
-echo_info "Now choose a hostname for your FrogNet network (this becomes the domain name)."
-read -rp "Enter the hostname [default: FrogNet-001]: " hostname_input
-FROGNET_HOSTNAME="${hostname_input:-FrogNet-001}"
-
-# Prompt for static IP address of the Pi (must be 10.x.x.1)
-cat <<EOF
-
-Next, choose the Pi’s static IP address on the 10.x.x.1 subnet.
-This address is what clients will use to reach the Frognet.
-If you want the default, use 10.2.2.1.
-Ensure that whatever you pick follows the format 10.<any>.<any>.1 (e.g., 10.5.10.1).
-
-EOF
-
-read -rp "Enter the Pi’s IP address [default: 10.2.2.1]: " ip_input
-PI_IP_ADDRESS="${ip_input:-10.2.2.1}"
-
-# Validate that it matches 10.x.x.1 pattern
-if [[ ! "$PI_IP_ADDRESS" =~ ^10\.[0-9]{1,3}\.[0-9]{1,3}\.1$ ]]; then
-  echo_err "Invalid IP “$PI_IP_ADDRESS”. Must be in the form 10.x.x.1."
-fi
-
-echo_info "Using $PI_IP_ADDRESS as the Pi’s static address."
-
-# Generate a unique install ID based on the current date and time
-INSTALL_ID="$(tr -dc 'a-f0-9' < /dev/urandom | head -c32 | sed 's/^\(........\)\(....\)\(....\)\(....\)\(............\)$/\1-\2-\3-\4-\5/')"
-
-# Prompt for email
-read -rp "Enter your email (for license registration): " USER_EMAIL
-if [[ -z "$USER_EMAIL" ]]; then
-  echo_warn "No email provided. Using placeholder for license registration."
-  USER_EMAIL="default@test.org"
-fi
-
-# Set endpoint and construct URL with query params
-ENDPOINT="https://oureventstream.com/registerFrogNet.php"
-FULL_URL="${ENDPOINT}?CustomerEmail=${USER_EMAIL}&NetworkID=${INSTALL_ID}&NetworkName=${FROGNET_HOSTNAME}"
-
-echo_info "Registering license with FrogNet at $FULL_URL…"
-
-# Perform the GET request
-RESPONSE=$(curl -s "$FULL_URL")
-if [[ $? -ne 0 ]]; then
-  echo_err "Failed to register license with FrogNet. Please check your network connection."
-fi
-
-echo_info "License registration response: $RESPONSE"
-
-
-# 8) Save configuration
 # ---------------------------------------------------------
-echo_info "Saving configuration to $ENV_FILE…"
+# 9) Network ID generation & storage
+# ---------------------------------------------------------
+echo_info "Generating Network ID fragments..."
+NETWORK_ID="$(tr -dc 'a-f0-9' < /dev/urandom | head -c32)"
+PART1="${NETWORK_ID:0:8}"
+PART2="${NETWORK_ID:8:8}"
+PART3="${NETWORK_ID:16:8}"
+PART4="${NETWORK_ID:24:8}"
+
+mkdir -p "$HOME"
+echo "$PART1" > "$HOME/.fn_g1"
+echo "$PART2" > "/etc/FrogNetID"
+echo "$PART3" > "/usr/local/bin/.fnid"
+
+chmod 600 "$HOME/.fn_g1" /etc/FrogNetID /usr/local/bin/.fnid
+
+# Reassemble for phone-home
+FULL_NETWORK_ID="$PART1$PART2$PART3$PART4"
+
+echo_info "Full Network ID: $FULL_NETWORK_ID"
+
+# ---------------------------------------------------------
+# 10) Phone home via GET
+# ---------------------------------------------------------
+ENDPOINT="https://oureventstream.com/registerFrogNet.php"
+echo_info "Registering with FrogNet..."
+RESPONSE=$(curl -s -G "$ENDPOINT" \
+  --data-urlencode "CustomerEmail=$USER_EMAIL" \
+  --data-urlencode "NetworkID=$FULL_NETWORK_ID" \
+  --data-urlencode "NetworkName=$FROGNET_HOSTNAME")
+
+echo_info "Response: $RESPONSE"
+
+echo_info "Saving configuration..."
 cat > "$ENV_FILE" <<EOF
 # FrogNet Config
 FROGNET_HOSTNAME="$FROGNET_HOSTNAME"
@@ -255,56 +184,25 @@ UPSTREAM_INTERFACE="$UPSTREAM_INTERFACE"
 INSTALL_DATE="$(date -Iseconds)"
 INSTALLER_VERSION="1.134"
 ORIGINAL_USER="$ORIGINAL_USER"
+NETWORK_ID_PART4="$PART4"
+NETWORK_ID_FULL="$FULL_NETWORK_ID"
 EOF
-chmod 600 "$ENV_FILE"
-chown root:root "$ENV_FILE"
+chmod 600 "$ENV_FILE"; chown root:root "$ENV_FILE"
 
 # ---------------------------------------------------------
-# 9) Patch mapInterfaces if it already exists
+# 11) Patch mapInterfaces
 # ---------------------------------------------------------
 if [[ -f "$MAP_FILE" ]]; then
-  echo_info "Patching mapInterfaces…"
+  echo_info "Patching mapInterfaces..."
   sed -i 's/^export eth0Name=.*/export eth0Name="'"$UPSTREAM_INTERFACE"'"/' "$MAP_FILE"
   sed -i 's/^export wlan0Name=.*/export wlan0Name="wlan0"/' "$MAP_FILE"
   sed -i 's/^export wlan1Name=.*/export wlan1Name=""/' "$MAP_FILE"
-  grep -E 'wlan0Name|wlan1Name' "$MAP_FILE"
-else
-  echo_warn "mapInterfaces not found—skipping patch."
 fi
-
-# ---------------------------------------------------------
-# 10) Run setup_lillypad.bash with the hostname and IP
-# ---------------------------------------------------------
-echo_info "Executing setup_lillypad.bash with $FROGNET_HOSTNAME and $PI_IP_ADDRESS…"
-if [[ -x "/usr/local/bin/setup_lillypad.bash" ]]; then
-  /usr/local/bin/setup_lillypad.bash "$FROGNET_HOSTNAME" "$PI_IP_ADDRESS"
-else
-  echo_warn "setup_lillypad.bash not found or not executable at /usr/local/bin/"
-fi
-
-# ---------------------------------------------------------
-# 11) Port 53 conflict resolution (commented out by default)
-# ---------------------------------------------------------
-# if lsof -i :53 | grep -q systemd-resolve; then
-#   echo_warn "Port 53 in use by systemd-resolved. Disabling it…"
-#   systemctl stop systemd-resolved
-#   systemctl disable systemd-resolved
-#   rm -f /etc/resolv.conf
-#   echo "nameserver 1.1.1.1" > /etc/resolv.conf
-# fi
 
 # ---------------------------------------------------------
 # 12) Final notice & reboot
 # ---------------------------------------------------------
-echo_info "Installation complete."
-echo_info "Review the log at: $LOG_FILE"
-echo_info "Ensure Ethernet is connected!!"
-echo_info "Rebooting in 30 seconds…"
-for i in {30..1}; do
-  printf "\rRebooting in %2d seconds… Press Ctrl+C to cancel." "$i"
-  sleep 1
-done
+echo_info "Installation complete. Rebooting in 30 seconds..."
+for i in {30..1}; do printf "\rReboot %2d… Ctrl+C to cancel" "$i"; sleep 1; done
 
-echo -e "\n"
-echo_info "Rebooting now."
-reboot
+echo -e "\n"; echo_info "Rebooting now..."; reboot
