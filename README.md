@@ -56,8 +56,8 @@ If you prefer to inspect and run the installer manually:
 ```bash
 git clone https://github.com/EventStreamInc/installer.git
 cd installer
-chmod +x installFrog.sh
-sudo ./installFrog.sh
+chmod +x installer.sh
+sudo ./installer.sh
 ```
 
 This will perform the same setup process interactively.
